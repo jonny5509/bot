@@ -8,9 +8,9 @@ This is a starter scaffold. Automatic checks run every 10 minutes only after you
 
 ## Windows quick start
 
-1. Install Node.js 20 or newer.
-2. Double-click `Start Time Sync.bat`.
-3. It installs dependencies on first run, starts the local server, and opens `http://127.0.0.1:3000`.
+1. Double-click `Start Time Sync.bat`.
+2. If Node.js 20 or newer is missing, the launcher downloads and installs the latest official Node.js LTS release automatically. Windows may ask for permission to install software.
+3. The launcher installs project dependencies on first run, starts the local server, and opens `http://127.0.0.1:3000`.
 4. Configure integrations and Discord from Setup.
 
 Credentials should be encrypted for the current Windows user using Windows DPAPI; never commit credentials or `.env` files. Keep the dashboard on localhost and do not port-forward it.
