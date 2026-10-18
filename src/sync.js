@@ -21,28 +21,26 @@ async function previewSync() {
       return { service: a.service, ok: true, seconds };
     } catch (e) { return { service: a.service, ok: false, error: e.message }; }
   }));
-  const valid = readings.filter(x => x.ok);
-  const allThreeConfigured = adapters.length === 3 && adapters.every(a => a.configured);
-  const allReadable = valid.length === adapters.length && readings.every(x => x.ok);
-  const allWritable = adapters.every(a => a.canAddTime === true);
-  if (!valid.length) return { ok: false, message: "No service adapter returned a timer. Check setup and API access.", readings, changes: [] };
-  if (!allThreeConfigured || !allReadable || !allWritable) {
+  const allConfigured = adapters.length === 3 && adapters.every(a => a.configured);
+  const allReadable = readings.length === 3 && readings.every(x => x.ok);
+  if (!allConfigured || !allReadable) {
     return {
-      ok: false,
-      message: "Preview only: all three services must be configured and readable, and each provider must support verified time additions before sync can run. Chaster reading is currently read-only; no changes were sent.",
-      readings,
-      changes: []
+      ok: false, writable: false,
+      message: "Cannot compare timers until all three integrations are enabled, configured, and readable. No changes were sent.",
+      readings, changes: []
     };
   }
-  const targetSeconds = Math.max(...valid.map(x => x.seconds));
+  const targetSeconds = Math.max(...readings.map(x => x.seconds));
+  const writable = adapters.every(a => a.canAddTime === true);
+  const changes = readings.map(x => ({
+    service: x.service, beforeSeconds: x.seconds, before: duration(x.seconds),
+    addSeconds: targetSeconds - x.seconds, add: duration(targetSeconds - x.seconds),
+    target: duration(targetSeconds),
+    allowed: targetSeconds - x.seconds <= Number(settings.maxAdditionSeconds)
+  }));
   return {
-    ok: true, targetSeconds, target: duration(targetSeconds), readings,
-    changes: valid.map(x => ({
-      service: x.service, beforeSeconds: x.seconds, before: duration(x.seconds),
-      addSeconds: targetSeconds - x.seconds, add: duration(targetSeconds - x.seconds),
-      target: duration(targetSeconds),
-      allowed: targetSeconds - x.seconds <= Number(settings.maxAdditionSeconds)
-    }))
+    ok: true, writable, targetSeconds, target: duration(targetSeconds), readings, changes,
+    message: writable ? "All integrations are readable and support writes." : "Preview only: at least one provider is read-only or its write schema is unverified. No changes will be sent."
   };
 }
 
@@ -51,11 +49,11 @@ async function runSync() {
   busy = true;
   try {
     const p = await previewSync();
-    if (!p.ok) {
-      await logEvent("warning", "Sync skipped: no readable timers.", {
-        reason: p.message, services: p.readings.map(x => x.service + ": " + (x.error || "unknown")).join("; ")
+    if (!p.ok || !p.writable) {
+      await logEvent("warning", "Sync skipped: comparison unavailable or at least one provider is read-only.", {
+        reason: p.message, services: (p.readings || []).map(x => x.service + ": " + (x.error || (x.ok ? "readable" : "unknown"))).join("; ")
       });
-      return p;
+      return { ...p, ok: false, message: p.message + " No timer changes were sent." };
     }
     const adapters = new Map(getAdapters(loadSettings()).map(a => [a.service, a]));
     const results = [];
