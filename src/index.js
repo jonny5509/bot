@@ -6,6 +6,7 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require
 const { loadSettings, saveSettings, publicSettings } = require("./config");
 const { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs } = require("./logger");
 const { previewSync, runSync } = require("./sync");
+const { createSettingsBackup, restoreSettingsBackup } = require("./backup");
 
 const app = express();
 const HOST = process.env.HOST || "127.0.0.1";
@@ -85,6 +86,35 @@ app.post("/api/sync", async (_req, res) => {
   } catch (e) { res.status(500).json({ ok: false, message: e.message }); }
 });
 app.get("/api/settings", (_req, res) => res.json(publicSettings(loadSettings())));
+
+app.post("/api/backup", (req, res) => {
+  const passphrase = req.body && req.body.passphrase;
+  if (typeof passphrase !== "string" || passphrase.length < 12 || passphrase.length > 1024) {
+    return res.status(400).json({ ok: false, message: "Use a backup passphrase of at least 12 characters." });
+  }
+  try {
+    res.json({ ok: true, backup: createSettingsBackup(loadSettings(), passphrase) });
+  } catch {
+    res.status(500).json({ ok: false, message: "Could not create settings backup." });
+  }
+});
+app.post("/api/restore", async (req, res) => {
+  const passphrase = req.body && req.body.passphrase;
+  if (typeof passphrase !== "string" || passphrase.length < 12 || passphrase.length > 1024) {
+    return res.status(400).json({ ok: false, message: "Enter the backup passphrase (at least 12 characters)." });
+  }
+  try {
+    const settings = restoreSettingsBackup(req.body.backup, passphrase);
+    stopScheduler();
+    saveSettings(settings);
+    await logEvent("warning", "Settings restored from an encrypted backup. Automatic sync remains stopped.", {
+      enabledIntegrations: Object.entries(settings.integrations).filter(([, v]) => v.enabled).map(([k]) => k).join(", ") || "none"
+    });
+    res.json({ ok: true, message: "Settings restored. Automatic sync is stopped. Restart the app to apply Discord bot settings." });
+  } catch (e) {
+    res.status(400).json({ ok: false, message: e.message || "Could not restore settings backup." });
+  }
+});
 app.post("/api/factory-reset", async (_req, res) => {
   try {
     stopScheduler();

@@ -29,6 +29,15 @@
 <label>Maximum time addition (hours) <input name="maxHours" type="number" min="0" max="8760" value="720"></label>
 <div id="integrations"></div><button class="primary" type="submit">Save settings</button>
 </form><p class="muted small">Restart the app after changing the Discord bot token or application/server IDs. IDs are not secret, but are stored locally.</p>
+<div class="reset-zone">
+<h3>Settings backup and restore</h3>
+<p>Create a portable encrypted backup of your settings, integration IDs, and saved credentials. Choose a strong passphrase and keep it separate from the backup file. The backup can be restored on another Windows account or PC; restored credentials are encrypted for that Windows user.</p>
+<label>Backup passphrase <input id="backupPassphrase" type="password" autocomplete="new-password" minlength="12" placeholder="At least 12 characters"></label>
+<div class="actions"><button id="exportBackup" type="button">Download encrypted backup</button></div>
+<label>Restore from backup file <input id="backupFile" type="file" accept=".json,application/json"></label>
+<div class="actions"><button id="restoreBackup" type="button" class="danger">Restore settings from file</button></div>
+<p class="muted small">Restoring replaces current settings. Automatic sync stays stopped. Never share the backup file or passphrase; the encrypted file contains your credentials.</p>
+</div>
 <div class="reset-zone"><h3>Factory reset</h3><p>This permanently deletes saved settings, encrypted service/Discord tokens, local logs, and the local .env file. Automatic sync will stop. This cannot delete messages already sent to Discord or revoke tokens at their providers.</p><button id="factoryReset" class="danger">Factory reset — erase all local data</button></div>
 </section>
 <section id="logs" class="page hidden"><div class="section-head"><h2>Recent logs</h2><button id="refreshLogs">Refresh</button></div><div id="logList" class="log-list"></div></section>
