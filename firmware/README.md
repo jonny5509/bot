@@ -6,8 +6,7 @@ This is a separate Arduino/PlatformIO firmware project. It does not replace the 
 
 - ESP32 DevKit V1 / ESP32-WROOM-32, 4 MB flash recommended.
 - Install PlatformIO in VS Code.
-- Obtain a PEM bundle of trusted public root certificates from Mozilla's official CA bundle source: https://curl.se/docs/caextract.html
-- Save it as `firmware/data/ca.pem` (create the directory first).
+- Create `firmware/data/ca.pem` containing the PEM-encoded root CA certificate(s) that validate the current TLS chains for all three provider API hosts. Use the official Mozilla CA source as the starting point: https://curl.se/docs/caextract.html. Do not blindly copy the entire root store: parsing a very large PEM bundle can exhaust RAM on a classic ESP32. Verify each selected root against the provider's current certificate chain and keep it updated.
 - In PlatformIO, build the LittleFS filesystem image and upload it, then upload the firmware.
 - Open Serial Monitor at 115200 baud.
 
