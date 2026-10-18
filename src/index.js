@@ -116,8 +116,8 @@ async function startDiscord() {
       .addSubcommand(s => s.setName("preview").setDescription("Preview timer differences"))
       .addSubcommand(s => s.setName("run").setDescription("Run a manual sync now"));
     const rest = new REST({ version: "10" }).setToken(token);
-    const route = process.env.DISCORD_GUILD_ID
-      ? Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID)
+    const route = guildId
+      ? Routes.applicationGuildCommands(clientId, guildId)
       : Routes.applicationCommands(clientId);
     await rest.put(route, { body: [command.toJSON()] });
     discordClient.on("interactionCreate", async interaction => {
