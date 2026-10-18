@@ -1,9 +1,10 @@
 require("dotenv").config();
 const express = require("express");
+const fs = require("node:fs");
 const path = require("node:path");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { loadSettings, saveSettings, publicSettings } = require("./config");
-const { setDiscordClient, logEvent, getRecentLogs } = require("./logger");
+const { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs } = require("./logger");
 const { previewSync, runSync } = require("./sync");
 
 const app = express();
@@ -66,6 +67,27 @@ app.post("/api/sync", async (_req, res) => {
   } catch (e) { res.status(500).json({ ok: false, message: e.message }); }
 });
 app.get("/api/settings", (_req, res) => res.json(publicSettings(loadSettings())));
+app.post("/api/factory-reset", async (_req, res) => {
+  try {
+    stopScheduler();
+    if (discordClient) {
+      try { await discordClient.destroy(); } catch {}
+      discordClient = null;
+      setDiscordClient(null);
+    }
+    const dataDir = path.join(process.cwd(), "data");
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    clearRecentLogs();
+    lastCheckAt = null;
+    lastResult = null;
+    autoRunning = false;
+    interval = null;
+    res.json({ ok: true, message: "Factory reset complete. Local settings, encrypted credentials, and local logs were deleted. Automatic sync is stopped." });
+  } catch (e) {
+    res.status(500).json({ ok: false, message: "Factory reset failed: " + e.message });
+  }
+});
+
 app.post("/api/settings", async (req, res) => {
   const body = req.body || {};
   const settings = loadSettings();
