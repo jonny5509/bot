@@ -3,12 +3,26 @@ setlocal
 cd /d "%~dp0"
 title Time Sync Bot
 
-where node >nul 2>nul
+rem Install Node.js automatically if it is missing or older than version 20.
+node -e "process.exit(Number(process.versions.node.split('.')[0])>=20?0:1)" >nul 2>nul
 if errorlevel 1 (
-  echo Node.js 20 or newer is required.
-  echo Download it from https://nodejs.org/
-  pause
-  exit /b 1
+  echo Node.js 20 or newer is required. Installing the latest Node.js LTS automatically...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-node.ps1"
+  if errorlevel 1 (
+    echo.
+    echo Automatic Node.js installation failed. Please check the error above.
+    pause
+    exit /b 1
+  )
+  rem Refresh this process's PATH so the newly installed Node.js can be found.
+  set "PATH=%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%PATH%"
+  node -e "process.exit(Number(process.versions.node.split('.')[0])>=20?0:1)" >nul 2>nul
+  if errorlevel 1 (
+    echo Node.js was installed, but Windows cannot find it yet.
+    echo Close this window and run Start Time Sync.bat again.
+    pause
+    exit /b 1
+  )
 )
 
 if not exist node_modules\ (
