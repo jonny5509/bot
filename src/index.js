@@ -77,6 +77,7 @@ app.post("/api/factory-reset", async (_req, res) => {
     }
     const dataDir = path.join(process.cwd(), "data");
     fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(path.join(process.cwd(), ".env"), { force: true });
     clearRecentLogs();
     lastCheckAt = null;
     lastResult = null;
