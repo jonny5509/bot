@@ -11,6 +11,8 @@ Windows-friendly local dashboard and Discord bot for comparing timer remaining t
 
 These API integrations are committed but have **not yet been tested with real provider credentials**. Treat them as implementation-in-progress, not production-ready.
 
+Mocked adapter tests are included. After installing dependencies, run `npm test` to check request paths, request bodies, time units, and the deliberate Chaster write block. The tests do not replace testing with your own provider credentials.
+
 ## Windows quick start
 
 1. Double-click `Start Time Sync.bat`.
