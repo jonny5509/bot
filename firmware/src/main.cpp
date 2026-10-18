@@ -106,7 +106,7 @@ void setupRoutes(){
   for(int i=0;i<3;i++){r[i].ok=readSvc(i,r[i].seconds,r[i].error);if(!r[i].ok)all=false;else target=max(target,r[i].seconds);}
   String o="{\"ok\":"+String(all?"true":"false")+",\"writable\":"+(all&&!caPem.isEmpty()?"true":"false")+",\"targetSeconds\":"+num64(target)+",\"target\":\""+dur(target)+"\",\"readings\":[";
   for(int i=0;i<3;i++){if(i)o+=",";o+="{\"service\":\""+String(r[i].name)+"\",\"ok\":"+(r[i].ok?"true":"false");if(r[i].ok)o+=",\"seconds\":"+num64(r[i].seconds)+",\"remaining\":\""+dur(r[i].seconds)+"\"";else o+=",\"error\":\""+esc(r[i].error)+"\"";o+="}";}
-  o+="],\"changes\":[";if(all)for(int i=0;i<3;i++){if(i)o+=",";int64_t a=target-r[i].seconds;o+="{\"service\":\""+String(r[i].name)+"\",\"beforeSeconds\":"+String((long long)r[i].seconds)+",\"addSeconds\":"+num64(a)+",\"add\":\""+dur(a)+"\",\"allowed\":"+(a<=maxAdd?"true":"false")+"}";}
+  o+="],\"changes\":[";if(all)for(int i=0;i<3;i++){if(i)o+=",";int64_t a=target-r[i].seconds;o+="{\"service\":\""+String(r[i].name)+"\",\"beforeSeconds\":"+num64(r[i].seconds)+",\"addSeconds\":"+num64(a)+",\"add\":\""+dur(a)+"\",\"allowed\":"+(a<=maxAdd?"true":"false")+"}";}
   o+="],\"message\":\""+String(all?"Preview only; no changes sent.":"All timers must be readable; no changes sent.")+"\"}";sendJ(200,o);
  });
  server.on("/api/sync",HTTP_POST,[]{if(!auth()){sendJ(401,"{\"ok\":false,\"message\":\"PIN required or incorrect.\"}");return;}String out=runSyncCore();JsonDocument d;parse(out,d);sendJ(d["ok"]==true?200:400,out);});
