@@ -16,7 +16,7 @@
 <article><span class="muted">Last result</span><strong id="lastResult">No sync yet</strong><span class="muted">Open logs for details</span></article>
 </div>
 <div class="actions"><button id="start" class="primary">Start automatic sync</button><button id="stop" class="danger">Stop automatic sync</button><button id="preview">Preview differences</button><button id="sync" class="primary">Run manual sync</button></div>
-<h2>Preview / latest result</h2><pre id="result" class="output">Configure integrations in Setup. Timer differences are previewed, but live changes remain blocked until Chaster time-writing is verified and all providers are tested.</pre>
+<div class="section-head"><h2>Live timer readings</h2><button id="refreshTimers" type="button">Refresh times</button></div><p class="muted small">Reads each configured service directly and refreshes every 30 seconds. These readings do not change any timers.</p><div id="liveTimers" class="cards"><article><span class="muted">Timers</span><strong>Loading…</strong><span class="muted small">Reading provider APIs</span></article></div><p id="liveUpdated" class="muted small">Not refreshed yet.</p><h2>Preview / latest result</h2><pre id="result" class="output">Configure integrations in Setup. Timer differences are previewed, but live changes remain blocked until Chaster time-writing is verified and all providers are tested.</pre>
 </section>
 <section id="setup" class="page hidden">
 <h2>Setup</h2><p class="muted">Secrets are encrypted with Windows DPAPI for your Windows user. Saved secrets are never sent back to this page; blank secret fields keep the existing secret.</p>
