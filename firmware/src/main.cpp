@@ -74,7 +74,7 @@ String runSyncCore(){
  // Never retry a non-idempotent request. Stop on the first failure.
  String failure="";bool ok=true;
  for(int i=0;i<3;i++){int64_t add=target-r[i].seconds;if(add==0)continue;String e;if(!addSvc(i,add,e)){ok=false;failure=String(r[i].name)+": "+e;break;}}
- if(ok)for(int i=0;i<3;i++){int64_t s;String e;if(!readSvc(i,s,e)){ok=false;failure=String(r[i].name)+" write may have succeeded but verification failed; inspect all timers before retrying.";break;}}
+ if(ok){int64_t verified[3]={0,0,0};for(int i=0;i<3;i++){String e;if(!readSvc(i,verified[i],e)){ok=false;failure=String(r[i].name)+" write may have succeeded but verification failed; inspect all timers before retrying.";break;}}if(ok){int64_t lo=verified[0],hi=verified[0];for(int i=1;i<3;i++){lo=min(lo,verified[i]);hi=max(hi,verified[i]);}if(hi-lo>15){ok=false;failure="Verification readings differ by more than 15 seconds; inspect all timers before retrying.";}}}
  busy=false;lastRunAt=String((uint32_t)(millis()/1000))+"s since boot";lastStatus=ok?"Writes accepted and verification reads succeeded.":failure;
  return "{\"ok\":"+(ok?String("true"):String("false"))+",\"message\":\""+esc(lastStatus)+"\"}";
 }
@@ -109,7 +109,7 @@ void setupRoutes(){
   o+="],\"changes\":[";if(all)for(int i=0;i<3;i++){if(i)o+=",";int64_t a=target-r[i].seconds;o+="{\"service\":\""+String(r[i].name)+"\",\"beforeSeconds\":"+num64(r[i].seconds)+",\"addSeconds\":"+num64(a)+",\"add\":\""+dur(a)+"\",\"allowed\":"+(a<=maxAdd?"true":"false")+"}";}
   o+="],\"message\":\""+String(all?"Preview only; no changes sent.":"All timers must be readable; no changes sent.")+"\"}";sendJ(200,o);
  });
- server.on("/api/sync",HTTP_POST,[]{if(!auth()){sendJ(401,"{\"ok\":false,\"message\":\"PIN required or incorrect.\"}");return;}String out=runSyncCore();JsonDocument d;parse(out,d);sendJ(d["ok"]==true?200:400,out);});
+ server.on("/api/sync",HTTP_POST,[]{if(!auth()){sendJ(401,"{\"ok\":false,\"message\":\"PIN required or incorrect.\"}");return;}String out=runSyncCore();JsonDocument d;parse(out,d);sendJ(d["ok"].as<bool>()?200:400,out);});
  server.on("/api/settings",HTTP_POST,saveSettings);
  server.on("/api/auto",HTTP_POST,[]{if(!auth()){sendJ(401,"{\"ok\":false,\"message\":\"PIN required or incorrect.\"}");return;}JsonDocument d;parse(server.arg("plain"),d);autoSync=d["enabled"]|false;lastAuto=millis();sendJ(200,stateJson());});
  server.onNotFound([]{server.send(404,"text/plain","Not found");});server.begin();
