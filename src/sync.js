@@ -55,16 +55,25 @@ async function runSync() {
       });
       return { ...p, ok: false, message: p.message + " No timer changes were sent." };
     }
+    // Preflight every addition before making any mutation. This avoids a
+    // predictable partial sync when one timer exceeds the configured safety cap.
+    const overLimit = p.changes.filter(change => change.addSeconds > 0 && !change.allowed);
+    if (overLimit.length) {
+      await logEvent("warning", "Sync blocked by safety limit; no timer changes were sent.", {
+        target: p.target,
+        blockedServices: overLimit.map(x => x.service).join(", "),
+        maximumAdditionSeconds: Number(loadSettings().maxAdditionSeconds)
+      });
+      return {
+        ...p, ok: false,
+        message: "Sync blocked: one or more additions exceed the configured maximum. No timer changes were sent.",
+        changes: p.changes.map(change => ({ ...change, status: change.addSeconds > 0 && !change.allowed ? "blocked-limit" : "not-started" }))
+      };
+    }
     const adapters = new Map(getAdapters(loadSettings()).map(a => [a.service, a]));
     const results = [];
     for (const change of p.changes) {
       if (change.addSeconds === 0) { results.push({ ...change, status: "already-matched" }); continue; }
-      if (!change.allowed) {
-        const result = { ...change, status: "skipped-limit", error: "Addition exceeds configured maximum" };
-        results.push(result);
-        await logEvent("warning", change.service + ": addition skipped by safety limit.", { before: change.before, requestedAddition: change.add, target: change.target });
-        continue;
-      }
       try {
         await adapters.get(change.service).addSeconds(change.addSeconds);
         results.push({ ...change, status: "changed" });
@@ -80,8 +89,18 @@ async function runSync() {
       }
     }
     const count = results.filter(x => x.status === "changed").length;
-    await logEvent("info", "Sync finished.", { target: p.target, changed: count, evaluated: results.length });
-    return { ok: true, target: p.target, readings: p.readings, changes: results };
+    const failures = results.filter(x => x.status === "failed");
+    const successful = failures.length === 0;
+    await logEvent(successful ? "info" : "error", successful
+      ? "Sync finished."
+      : "Sync finished with failures; some timers may already have changed.",
+    { target: p.target, changed: count, failed: failures.length, evaluated: results.length });
+    return {
+      ok: successful, target: p.target, readings: p.readings, changes: results,
+      message: successful
+        ? "Synchronization requests completed. Verify provider timers to confirm the resulting values."
+        : "One or more provider writes failed. Some timers may already have changed; inspect each result and verify all timers before retrying."
+    };
   } finally { busy = false; }
 }
 module.exports = { previewSync, runSync };
