@@ -49,10 +49,17 @@ function emlaUrl(path, userId, apiKey, extra = {}) {
   return url;
 }
 async function emlalock(userId, apiKey, path, extra = {}) {
-  // EmlaLock requires query-string credentials; never log this URL or echo it in errors.
-  return responseJson(await fetch(emlaUrl(path, userId, apiKey, extra), {
-    headers: { Accept: "application/json" }
-  }), "EmlaLock");
+  // EmlaLock requires query-string credentials; redact fetch failures too because
+  // some runtimes include the requested URL (and API key) in network errors.
+  let response;
+  try {
+    response = await fetch(emlaUrl(path, userId, apiKey, extra), {
+      headers: { Accept: "application/json" }
+    });
+  } catch {
+    throw new Error("EmlaLock request failed before a response was received; request details are redacted.");
+  }
+  return responseJson(response, "EmlaLock");
 }
 function emlaEnd(body) {
   const n = Number(body?.chastitysession?.enddate);
