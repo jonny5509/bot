@@ -36,6 +36,12 @@ Mocked adapter tests are included. After installing dependencies, run `npm test`
 
 Secrets are encrypted for the current Windows user using Windows DPAPI. Never commit credentials or `.env` files. Keep the dashboard on localhost and do not port-forward it. EmlaLock's documented API requires the key in the HTTPS query string; the adapter never logs the URL and redacts network errors. Chastify time-change requests are not retried automatically.
 
+## Settings backup and restore
+
+Open **Setup → Settings backup and restore** to download an encrypted JSON backup or restore one later. Backups include all saved settings and credentials. They are encrypted with AES-256-GCM using a key derived from your passphrase with scrypt; use a passphrase of at least 12 characters. The passphrase is never saved by the app. Without it, the backup cannot be restored.
+
+Keep the backup file and passphrase separate and private. Restore replaces the current settings and leaves automatic sync stopped. Secrets are encrypted again with Windows DPAPI for the Windows user running the app, so a backup can be moved to another PC/account as long as you know the passphrase. Restart the app after restoring to apply Discord bot settings.
+
 ## Factory reset
 
 Open **Setup → Factory reset** and confirm twice. This stops automatic sync and deletes local settings, encrypted credentials, local logs, and `.env`. It cannot delete Discord messages already sent or revoke provider credentials; revoke those separately if needed.
