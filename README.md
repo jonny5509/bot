@@ -6,12 +6,12 @@ Windows-friendly local dashboard and Discord bot for comparing timer remaining t
 
 - **Chastify adapter implemented:** reads the selected lock through the user-wide Developer API and adds a positive time delta using `POST /api/apps/v1/lock/apply-time`. Use the exact 24-character hexadecimal `lock._id` and a key with `locks:read` and `locks:write`. The endpoint is non-idempotent, so the bot does not automatically retry time changes. Official docs: https://docs.chastify.net/developer-api/external-api-programs/
 - **EmlaLock adapter implemented:** reads `chastitysession.enddate` from `GET /info` and adds seconds through `GET /add`. The API requires the User ID and API key as HTTPS query parameters; the code redacts request/network errors to avoid logging the key. Official docs: https://about.emlalock.com/docs/api/
-- **Chaster read adapter implemented; write adapter intentionally disabled:** the public OpenAPI schema lists `POST /locks/{lockId}/update-time`, but its `UpdateTimeDto` currently declares no properties. The request body cannot safely be guessed. Official schema: https://api.chaster.app/api-json
-- **Live synchronization remains blocked** until Chaster's time-add request contract is clarified and all three services have been tested against real API responses. The dashboard can calculate differences once all three timers are readable, but it will not send any changes while one adapter is read-only.
+- **Chaster adapter implemented:** reads the selected lock and adds a positive time delta with `POST /locks/{lockId}/update-time`, sending `{"duration": seconds}` with a Bearer token. The duration is expressed in seconds. Official API: https://api.chaster.app/api
+- **Live synchronization can write to all three providers** when all integrations are enabled, configured, readable, and the computed additions pass the configured safety limit. The bot computes each difference against the longest timer and sends only that delta; verify provider timers after a real sync.
 
 These API integrations are committed but have **not yet been tested with real provider credentials**. Treat them as implementation-in-progress, not production-ready.
 
-Mocked adapter tests are included. After installing dependencies, run `npm test` to check request paths, request bodies, time units, and the deliberate Chaster write block. The tests do not replace testing with your own provider credentials.
+Mocked adapter tests are included. After installing dependencies, run `npm test` to check request paths, request bodies, time units, and validation of Chaster additions. The tests do not replace testing with your own provider credentials.
 
 ## Automatic schedule
 
