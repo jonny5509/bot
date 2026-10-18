@@ -10,6 +10,7 @@
 #include <time.h>
 
 static const char *AP_NAME="TimerSync-Setup";
+String setupApPassword(){char b[16];snprintf(b,sizeof(b),"TS-%012llX",(unsigned long long)(ESP.getEfuseMac() & 0xFFFFFFFFFFFFULL));return String(b);}
 static const uint32_t INTERVAL_MS=600000, HTTP_TIMEOUT_MS=12000;
 WebServer server(80); DNSServer dns; Preferences prefs;
 String caPem,wifiSsid,wifiPassword,adminPin,ct,cl,ft,fl,eu,ek;
@@ -93,7 +94,7 @@ void saveSettings(){
  prefs.putUInt("maxadd",(uint32_t)mx);prefs.end();load();sendJ(200,"{\"ok\":true,\"message\":\"Saved. Secrets are never returned to the browser.\"}");
 }
 void setupPortal(){
- WiFi.mode(WIFI_AP_STA);WiFi.softAP(AP_NAME);dns.start(53,"*",WiFi.softAPIP());
+ WiFi.mode(WIFI_AP_STA);String apPass=setupApPassword();WiFi.softAP(AP_NAME,apPass.c_str());dns.start(53,"*",WiFi.softAPIP());Serial.print("Setup AP password (unique to this device): ");Serial.println(apPass);
  server.on("/",HTTP_GET,[]{server.send(200,"text/html",R"HTML(<!doctype html><html><meta name="viewport" content="width=device-width"><title>Timer Sync Wi-Fi</title><body style="font:16px system-ui;max-width:520px;margin:30px auto;padding:12px"><h1>Timer Sync Wi-Fi setup</h1><form method="post" action="/wifi"><label>Home Wi-Fi name (SSID)<br><input name="ssid" required></label><p><label>Password<br><input name="password" type="password"></label></p><button>Save and restart</button></form></body></html>)HTML");});
  server.on("/wifi",HTTP_POST,[]{String s=server.arg("ssid"),p=server.arg("password");if(s.isEmpty()||s.length()>32||p.length()>64){server.send(400,"text/plain","Invalid Wi-Fi values");return;}prefs.begin("timersync",false);prefs.putString("ssid",s);prefs.putString("wpass",p);prefs.end();server.send(200,"text/plain","Saved. Restarting.");delay(500);ESP.restart();});
  server.onNotFound([]{server.sendHeader("Location","http://192.168.4.1/");server.send(302,"text/plain","Setup portal");});server.begin();Serial.println("Connect to TimerSync-Setup; open http://192.168.4.1");
