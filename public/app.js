@@ -22,3 +22,37 @@ $("#refreshTimers").addEventListener("click",refreshLiveTimes);
 $("#settingsForm").addEventListener("submit",async e=>{e.preventDefault();const f=e.currentTarget;const integrations={};for(const k of Object.keys(names)){const isEmla=k==="emlalock";integrations[k]={enabled:f.elements[k+"-enabled"].checked,timerId:isEmla?"":f.elements[k+"-timerId"]?.value||"",userId:isEmla?f.elements[k+"-userId"].value:"",apiToken:f.elements[k+"-apiToken"].value,clearToken:f.elements[k+"-clearToken"].checked}}const r=await api("/api/settings",{method:"POST",body:JSON.stringify({discordBotToken:f.elements.discordBotToken.value,clearDiscordBotToken:f.elements.clearDiscordBotToken.checked,discordLogChannelId:f.elements.discordLogChannelId.value,maxAdditionSeconds:Number(f.elements.maxHours.value)*3600,discordClientId:f.elements.clientId.value,discordGuildId:f.elements.guildId.value,integrations})});toast(r.message||(r.ok?"Settings saved.":"Could not save settings."));f.elements.discordBotToken.value="";await loadSettings()});
 refreshState().catch(()=>toast("Could not connect to the local server."));refreshLiveTimes();setInterval(()=>refreshState().catch(()=>{}),5000);setInterval(()=>refreshLiveTimes(),30000);
 $("#factoryReset").addEventListener("click",async()=>{const warning="FACTORY RESET\n\nThis permanently deletes all saved local settings, encrypted API tokens, Discord bot token, timer IDs, local logs, and the .env file. Automatic sync will stop. This cannot delete Discord messages already sent or revoke tokens with their providers.\n\nContinue?";if(!confirm(warning))return;if(!confirm("Final confirmation: erase ALL local bot data and return to a fresh setup?"))return;const button=$("#factoryReset");button.disabled=true;try{const r=await api("/api/factory-reset",{method:"POST",body:"{}"});if(!r.ok)throw new Error(r.message||"Factory reset failed");$("#settingsForm").reset();$("#integrations").innerHTML="";$("#result").textContent="Factory reset complete. Start fresh in Setup.";$("#logList").innerHTML="<p class='muted'>No log entries yet.</p>";await refreshState();toast(r.message+" Restart the app before configuring Discord again.");await loadSettings()}catch(err){toast(err.message)}finally{button.disabled=false}});
+
+
+// Encrypted settings backup / restore. The passphrase is never stored.
+$("#exportBackup").addEventListener("click",async()=>{
+  const passphrase=$("#backupPassphrase").value;
+  if(passphrase.length<12){toast("Choose a backup passphrase of at least 12 characters.");return}
+  const button=$("#exportBackup");button.disabled=true;
+  try{
+    const r=await api("/api/backup",{method:"POST",body:JSON.stringify({passphrase})});
+    if(!r.ok||!r.backup)throw new Error(r.message||"Could not create backup.");
+    const blob=new Blob([JSON.stringify(r.backup,null,2)+"\n"],{type:"application/json"});
+    const url=URL.createObjectURL(blob);const link=document.createElement("a");
+    link.href=url;link.download="time-sync-settings-backup-"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+    toast("Encrypted settings backup downloaded. Keep the passphrase safe.");
+  }catch(e){toast(e.message||"Could not create backup.")}finally{button.disabled=false}
+});
+$("#restoreBackup").addEventListener("click",async()=>{
+  const passphrase=$("#backupPassphrase").value;
+  const file=$("#backupFile").files[0];
+  if(!file){toast("Choose a backup JSON file first.");return}
+  if(file.size>100000){toast("Backup file is too large or invalid.");return}
+  if(passphrase.length<12){toast("Enter the backup passphrase (at least 12 characters).");return}
+  if(!confirm("Restore this backup and replace all current settings and saved credentials? Automatic sync will be stopped. Make a backup of current settings first if you may need them."))return;
+  const button=$("#restoreBackup");button.disabled=true;
+  try{
+    let backup;try{backup=JSON.parse(await file.text())}catch{throw new Error("The selected file is not valid JSON.")}
+    const r=await api("/api/restore",{method:"POST",body:JSON.stringify({backup,passphrase})});
+    if(!r.ok)throw new Error(r.message||"Restore failed.");
+    $("#backupFile").value="";
+    await loadSettings();await refreshState();
+    toast(r.message||"Settings restored.");
+  }catch(e){toast(e.message||"Could not restore backup.")}finally{button.disabled=false}
+});
