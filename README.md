@@ -13,14 +13,20 @@ These API integrations are committed but have **not yet been tested with real pr
 
 Mocked adapter tests are included. After installing dependencies, run `npm test` to check request paths, request bodies, time units, and the deliberate Chaster write block. The tests do not replace testing with your own provider credentials.
 
+## Automatic schedule
+
+- Automatic mode is **stopped by default** every time the app launches.
+- When you manually start it, the first automatic check is scheduled for the **next local clock boundary** divisible by 10 minutes, then at :00, :10, :20, :30, :40, and :50 for the rest of the day and overnight.
+- The scheduler recalculates against the wall clock after each check. If a check runs long, missed boundaries are skipped instead of running catch-up checks.
+- The schedule continues 24/7 only while the app process is running and the computer is awake and connected. It does not run while the computer is shut down or asleep.
+- Stopping automatic mode cancels the next scheduled check. Manual checks remain available.
+
 ## Windows quick start
 
 1. Double-click `Start Time Sync.bat`.
 2. If Node.js 20 or newer is missing, the launcher downloads and installs the latest official Node.js LTS release automatically. Windows may ask for permission to install software.
 3. The launcher installs project dependencies on first run, starts the local server, and opens `http://127.0.0.1:3000`.
 4. In Setup, configure Chastify with its user-wide Developer API key and exact lock ID, EmlaLock with its User ID and API key, and Chaster with its Developer Token and lock ID.
-
-Automatic checks run every 10 minutes only after you start them. Automatic mode is stopped by default on every app launch.
 
 ## Security
 
