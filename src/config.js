@@ -6,6 +6,8 @@ const dataDir = path.join(process.cwd(), "data");
 const settingsPath = path.join(dataDir, "settings.json");
 const defaults = {
   discordLogChannelId: "",
+  discordClientId: "",
+  discordGuildId: "",
   discordBotToken: "",
   maxAdditionSeconds: 2592000,
   integrations: {
@@ -52,6 +54,8 @@ function saveSettings(settings) {
 function publicSettings(s) {
   return {
     discordLogChannelId: s.discordLogChannelId || "",
+    discordClientId: s.discordClientId || "",
+    discordGuildId: s.discordGuildId || "",
     discordTokenConfigured: Boolean(s.discordBotToken),
     maxAdditionSeconds: s.maxAdditionSeconds,
     integrations: Object.fromEntries(Object.entries(s.integrations).map(([name, v]) => [name, {
