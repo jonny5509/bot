@@ -6,7 +6,7 @@ This is a separate Arduino/PlatformIO firmware project. It does not replace the 
 
 - ESP32 DevKit V1 / ESP32-WROOM-32, 4 MB flash recommended.
 - Install PlatformIO in VS Code.
-- Create `firmware/data/ca.pem` containing the PEM-encoded root CA certificate(s) that validate the current TLS chains for all three provider API hosts. Use the official Mozilla CA source as the starting point: https://curl.se/docs/caextract.html. Do not blindly copy the entire root store: parsing a very large PEM bundle can exhaust RAM on a classic ESP32. Verify each selected root against the provider's current certificate chain and keep it updated.
+- Create `firmware/data/ca.pem` containing the PEM-encoded root CA certificate(s) that validate the current TLS chains for all three provider API hosts and `discord.com` (for webhook delivery). Use the official Mozilla CA source as the starting point: https://curl.se/docs/caextract.html. Do not blindly copy the entire root store: parsing a very large PEM bundle can exhaust RAM on a classic ESP32. Verify each selected root against the provider's current certificate chain and keep it updated.
 - In PlatformIO, build the LittleFS filesystem image and upload it, then upload the firmware.
 - Open Serial Monitor at 115200 baud.
 
@@ -21,6 +21,14 @@ TLS validation is mandatory. The firmware does not call `setInsecure()`; HTTPS f
 5. Set an admin PIN of at least 8 characters and enter provider lock IDs and credentials.
 
 The setup AP has a device-specific password, but its password is printed over serial; keep physical access to the board and serial output private. Disconnect from the setup AP when finished. If Wi-Fi connection fails, the setup AP starts again.
+
+## Discord webhook notifications
+
+- Create an incoming webhook in your Discord channel and copy its URL.
+- Open the ESP32 dashboard on your home Wi-Fi, enter the webhook URL in Settings, and save. The URL is stored in Preferences/NVS and is never displayed back to the browser. Anyone with the URL can post to that channel, so keep the device and home LAN private.
+- The ESP32 sends a message after each manual or automatic sync result, plus a periodic status report every six hours while connected to Wi-Fi.
+- Leave the field blank to keep the previously saved URL. To remove a saved webhook, clear the `webhook` key from the `timersync` Preferences namespace using an appropriate maintenance/reset workflow.
+- HTTPS certificate validation is required; ensure `firmware/data/ca.pem` includes the root CA for Discord as well as all timer provider hosts.
 
 ## Behavior
 
