@@ -22,7 +22,6 @@ async function previewSync() {
     } catch (e) { return { service: a.service, ok: false, error: e.message }; }
   }));
   const valid = readings.filter(x => x.ok);
-  const configuredAdapters = adapters.filter(a => a.configured);
   const allThreeConfigured = adapters.length === 3 && adapters.every(a => a.configured);
   const allReadable = valid.length === adapters.length && readings.every(x => x.ok);
   const allWritable = adapters.every(a => a.canAddTime === true);
