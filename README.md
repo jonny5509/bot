@@ -14,3 +14,7 @@ This is a starter scaffold. Automatic checks run every 10 minutes only after you
 4. Configure integrations and Discord from Setup.
 
 Credentials should be encrypted for the current Windows user using Windows DPAPI; never commit credentials or `.env` files. Keep the dashboard on localhost and do not port-forward it.
+
+## Factory reset
+
+Open **Setup → Factory reset** and confirm twice. This stops automatic sync, disconnects the Discord client, and deletes the local `data/` directory (saved encrypted credentials and local logs) plus `.env`. Restart the app to begin fresh. It cannot delete Discord messages already sent or revoke credentials with Chaster, Chastify, EmlaLock, or Discord; revoke those separately if needed.
