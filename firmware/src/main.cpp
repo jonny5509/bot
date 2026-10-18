@@ -19,7 +19,8 @@ String lastStatus="Not run yet",lastRunAt="";
 
 struct Reading { const char *name; bool ok; int64_t seconds; String error; };
 String esc(const String &s){String o;for(char c:s){if(c=='"'||c=='\\'){o+='\\';o+=c;}else if(c=='\n')o+="\\n";else if((uint8_t)c>=32)o+=c;}return o;}
-String num64(int64_t n){char b[24];snprintf(b,sizeof(b),"%lld",(long long)n);return String(b);}\nString dur(int64_t n){if(n<0)n=0;String o;int64_t d=n/86400,h=n%86400/3600,m=n%3600/60,s=n%60;if(d)o+=num64(d)+"d ";if(h)o+=num64(h)+"h ";if(m)o+=num64(m)+"m ";o+=num64(s)+"s";o.trim();return o;}
+String num64(int64_t n){char b[24];snprintf(b,sizeof(b),"%lld",(long long)n);return String(b);}
+String dur(int64_t n){if(n<0)n=0;String o;int64_t d=n/86400,h=n%86400/3600,m=n%3600/60,s=n%60;if(d)o+=num64(d)+"d ";if(h)o+=num64(h)+"h ";if(m)o+=num64(m)+"m ";o+=num64(s)+"s";o.trim();return o;}
 String urlenc(const String &s){const char *hex="0123456789ABCDEF";String o;for(uint8_t c:s){if(isalnum(c)||c=='-'||c=='_'||c=='.'||c=='~')o+=(char)c;else{o+='%';o+=hex[c>>4];o+=hex[c&15];}}return o;}
 bool parse(const String &s,JsonDocument &d){d.clear();return deserializeJson(d,s)==DeserializationError::Ok;}
 bool requestJson(const String &url,const String &method,const String &token,const String &body,JsonDocument &out,String &err,const String &hn="",const String &hv=""){
@@ -36,8 +37,9 @@ bool requestJson(const String &url,const String &method,const String &token,cons
 bool readChaster(int64_t &s,String &e){
  JsonDocument d;if(!requestJson("https://api.chaster.app/locks/"+urlenc(cl),"GET",ct,"",d,e))return false;
  JsonVariantConst l=d.as<JsonVariantConst>();if(d["lock"].is<JsonObjectConst>())l=d["lock"].as<JsonVariantConst>();else if(d["data"].is<JsonObjectConst>())l=d["data"].as<JsonVariantConst>();
- String dt=l["endDate"]|String("");if(dt.isEmpty())dt=l["endDateTime"]|String("");if(dt.isEmpty())dt=l["timer"]["endDate"]|String("");if(dt.isEmpty())dt=l["session"]["endDate"]|String("");
- int y,mo,day,h,mi,se;if(sscanf(dt.c_str(),"%4d-%2d-%2dT%2d:%2d:%2d",&y,&mo,&day,&h,&mi,&se)!=6){e="Chaster end date not recognized.";return false;}
+ JsonVariantConst endVal=l["endDate"];if(endVal.isNull())endVal=l["endDateTime"];if(endVal.isNull())endVal=l["timer"]["endDate"];if(endVal.isNull())endVal=l["session"]["endDate"];
+ if(endVal.is<long long>() || endVal.is<double>()){double raw=endVal.as<double>();int64_t epoch=(int64_t)raw;if(epoch>0&&epoch<100000000000LL)epoch*=1000;time_t now=time(nullptr);if(now<100000){e="Clock not synchronized yet; wait for NTP.";return false;}s=max((int64_t)0,epoch/1000-(int64_t)now);return true;}
+ String dt=endVal|String("");int y,mo,day,h,mi,se;if(sscanf(dt.c_str(),"%4d-%2d-%2dT%2d:%2d:%2d",&y,&mo,&day,&h,&mi,&se)!=6){e="Chaster end date not recognized.";return false;}
  struct tm t={};t.tm_year=y-1900;t.tm_mon=mo-1;t.tm_mday=day;t.tm_hour=h;t.tm_min=mi;t.tm_sec=se;time_t end=timegm(&t);
  int p=dt.indexOf('+');if(p<0)p=dt.lastIndexOf('-');if(p>10&&p+5<=(int)dt.length()){int sign=dt[p]=='+'?1:-1;end-=sign*(dt.substring(p+1,p+3).toInt()*3600+dt.substring(p+4,p+6).toInt()*60);}
  time_t now=time(nullptr);if(now<100000){e="Clock not synchronized yet; wait for NTP.";return false;}s=max((int64_t)0,(int64_t)end-(int64_t)now);return true;
