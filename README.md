@@ -13,6 +13,13 @@ These API integrations are committed but have **not yet been tested with real pr
 
 Mocked adapter tests are included. After installing dependencies, run `npm test` to check request paths, request bodies, time units, and validation of Chaster additions. The tests do not replace testing with your own provider credentials.
 
+## Discord webhook notifications
+
+- Create an incoming webhook in the Discord channel where you want notifications, then copy its URL.
+- Open the local `.env` file (copy `.env.example` if needed) and set `DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...`. Keep the URL private; anyone with it can post to that channel.
+- Restart the Windows launcher. Each manual or automatic sync sends a success/failure message, and a periodic health report is sent every six hours while the app is running.
+- The webhook is optional; leave it blank to disable webhook notifications. The existing Discord bot/channel integration remains separate.
+
 ## Automatic schedule
 
 - Automatic mode is **stopped by default** every time the app launches.
