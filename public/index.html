@@ -21,9 +21,9 @@
 <section id="setup" class="page hidden">
 <h2>Setup</h2><p class="muted">Secrets are encrypted with Windows DPAPI for your Windows user. Saved secrets are never sent back to this page; blank secret fields keep the existing secret.</p>
 <form id="settingsForm">
-<label>Discord bot token <input name="discordBotToken" type="password" autocomplete="new-password" placeholder="Paste token once (masked)"></label>
+<label>Discord bot token <input name="discordBotToken" type="password" autocomplete="new-password" placeholder="Paste token once (masked)"></label><p class="muted small">Create your bot in the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a>. Open your application → Bot to get/reset the token. Keep it private.</p>
 <label class="checkline"><input name="clearDiscordBotToken" type="checkbox"> Clear saved Discord bot token</label>
-<label>Discord application / client ID <input name="clientId" placeholder="Application ID from Discord Developer Portal"></label>
+<label>Discord application / client ID <input name="clientId" placeholder="Application ID from Discord Developer Portal"></label><p class="muted small">Use the Application ID on your app’s General Information page. For server and channel IDs, enable Developer Mode in <a href="https://support.discord.com/hc/en-us/articles/206346498" target="_blank" rel="noopener noreferrer">Discord’s Advanced settings</a>, then right-click the server or channel and choose Copy ID.</p>
 <label>Discord server / guild ID (optional) <input name="guildId" placeholder="Guild ID for faster command registration"></label>
 <label>Discord log channel ID <input name="discordLogChannelId" placeholder="Channel ID where changes should be logged"></label>
 <label>Maximum time addition (hours) <input name="maxHours" type="number" min="0" max="8760" value="720"></label>
