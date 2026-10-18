@@ -3,21 +3,7 @@ const crypto = require("node:crypto");
 function deriveBackupKey(passphrase, salt) {
   return crypto.scryptSync(passphrase, salt, 32);
 }
-function createSettingsBackup(settings, passphrase) {
-  const salt = crypto.randomBytes(16);
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", deriveBackupKey(passphrase, salt), iv);
-  const encrypted = Buffer.concat([cipher.update(JSON.stringify(settings), "utf8"), cipher.final()]);
-  return {
-    format: "timesync-settings-backup", version: 1, kdf: "scrypt", cipher: "aes-256-gcm",
-    salt: salt.toString("base64"), iv: iv.toString("base64"),
-    tag: cipher.getAuthTag().toString("base64"), ciphertext: encrypted.toString("base64")
-  };
-}
-// passphrase. Restored secrets are re-encrypted with this Windows user's DPAPI.
-function deriveBackupKey(passphrase, salt) {
-  return crypto.scryptSync(passphrase, salt, 32);
-}
+
 function createSettingsBackup(settings, passphrase) {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
@@ -34,6 +20,7 @@ function createSettingsBackup(settings, passphrase) {
     ciphertext: encrypted.toString("base64")
   };
 }
+
 function restoreSettingsBackup(backup, passphrase) {
   if (!backup || backup.format !== "timesync-settings-backup" || backup.version !== 1 ||
       backup.kdf !== "scrypt" || backup.cipher !== "aes-256-gcm" ||
