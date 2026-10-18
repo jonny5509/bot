@@ -1,5 +1,4 @@
 // Provider adapters for Chaster, Chastify, and EmlaLock.
-// Chaster writes stay disabled until its public UpdateTimeDto is documented.
 const API = "https://api.chaster.app";
 const CHASTIFY = "https://chastify.net/api/apps/v1";
 const EMLA = "https://api.emlalock.com";
@@ -13,9 +12,10 @@ async function responseJson(response, service) {
   }
   return body;
 }
-async function chaster(token, endpoint) {
+async function chaster(token, endpoint, options = {}) {
   return responseJson(await fetch(API + endpoint, {
-    headers: { Authorization: "Bearer " + token, Accept: "application/json" }
+    ...options,
+    headers: { Authorization: "Bearer " + token, Accept: "application/json", ...(options.headers || {}) }
   }), "Chaster");
 }
 function lockObject(v) { return v?.lock || v?.data || v; }
@@ -74,12 +74,21 @@ function getAdapters(settings) {
       ? Boolean(c.enabled && c.apiToken && c.userId)
       : Boolean(c.enabled && c.apiToken && c.timerId);
     if (service === "chaster") return {
-      service, configured, canAddTime: false,
+      service, configured, canAddTime: true,
       async readRemainingSeconds() {
         if (!configured) throw new Error("Chaster is not configured");
         return Math.max(0, Math.floor((chasterEnd(lockObject(await chaster(c.apiToken, "/locks/" + encodeURIComponent(c.timerId)))) - Date.now()) / 1000));
       },
-      async addSeconds() { throw new Error("Chaster time additions are disabled until its request schema is verified."); }
+      async addSeconds(seconds) {
+        if (!configured || !Number.isSafeInteger(seconds) || seconds <= 0) {
+          throw new Error("Chaster addition must be a positive whole number of seconds.");
+        }
+        await chaster(c.apiToken, "/locks/" + encodeURIComponent(c.timerId) + "/update-time", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ duration: seconds })
+        });
+      }
     };
     if (service === "chastify") return {
       service, configured, canAddTime: true,
