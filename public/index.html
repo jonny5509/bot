@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Time Sync Bot</title><link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header><div><div class="eyebrow">LOCAL CONTROL PANEL</div><h1>Time Sync Bot</h1><p>Chaster · Chastify · EmlaLock</p></div><span id="status" class="pill stopped">STOPPED</span></header>
+<nav><button class="tab active" data-page="dashboard">Dashboard</button><button class="tab" data-page="setup">Setup</button><button class="tab" data-page="logs">Logs</button></nav>
+<main>
+<section id="dashboard" class="page">
+<div class="notice"><strong>Stopped by default.</strong> Automatic checks run every 10 minutes only after you start them. Manual sync is separate.</div>
+<div class="cards">
+<article><span class="muted">Automatic mode</span><strong id="mode">Stopped</strong><span class="muted">10-minute interval</span></article>
+<article><span class="muted">Last check</span><strong id="lastCheck">Never</strong><span class="muted">Automatic or manual</span></article>
+<article><span class="muted">Last result</span><strong id="lastResult">No sync yet</strong><span class="muted">Open logs for details</span></article>
+</div>
+<div class="actions"><button id="start" class="primary">Start automatic sync</button><button id="stop" class="danger">Stop automatic sync</button><button id="preview">Preview differences</button><button id="sync" class="primary">Run manual sync</button></div>
+<h2>Preview / latest result</h2><pre id="result" class="output">Configure your integrations in Setup. Live provider adapters still need to be implemented.</pre>
+</section>
+<section id="setup" class="page hidden">
+<h2>Setup</h2><p class="muted">Secrets are encrypted with Windows DPAPI for your Windows user. Saved secrets are never sent back to this page; blank secret fields keep the existing secret.</p>
+<form id="settingsForm">
+<label>Discord bot token <input name="discordBotToken" type="password" autocomplete="new-password" placeholder="Paste token once (masked)"></label>
+<label class="checkline"><input name="clearDiscordBotToken" type="checkbox"> Clear saved Discord bot token</label>
+<label>Discord application / client ID <input name="clientId" placeholder="Application ID from Discord Developer Portal"></label>
+<label>Discord server / guild ID (optional) <input name="guildId" placeholder="Guild ID for faster command registration"></label>
+<label>Discord log channel ID <input name="discordLogChannelId" placeholder="Channel ID where changes should be logged"></label>
+<label>Maximum time addition (hours) <input name="maxHours" type="number" min="0" max="8760" value="720"></label>
+<div id="integrations"></div><button class="primary" type="submit">Save settings</button>
+</form><p class="muted small">Restart the app after changing the Discord bot token or application/server IDs. IDs are not secret, but are stored locally.</p>
+</section>
+<section id="logs" class="page"><div class="section-head"><h2>Recent logs</h2><button id="refreshLogs">Refresh</button></div><div id="logList" class="log-list"></div></section>
+<div id="toast" role="status" aria-live="polite"></div>
+</main><script src="/app.js"></script>
+</body></html>
