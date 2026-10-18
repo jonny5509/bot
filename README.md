@@ -41,7 +41,7 @@ Mocked adapter tests are included. After installing dependencies, run `npm test`
 
 ## Security
 
-Secrets are encrypted for the current Windows user using Windows DPAPI. Never commit credentials or `.env` files. Keep the dashboard on localhost and do not port-forward it. EmlaLock's documented API requires the key in the HTTPS query string; the adapter never logs the URL and redacts network errors. Chastify time-change requests are not retried automatically.
+Secrets are encrypted for the current Windows user using Windows DPAPI. Never commit credentials or `.env` files. The dashboard listens on network interfaces so other devices on your local network can use `http://<machine-ip>:3000`. **There is no dashboard login**, so only use this on a trusted private network, do not port-forward it, and use Windows Firewall to restrict access if needed. The dashboard can manage credentials and trigger timer changes. EmlaLock's documented API requires the key in the HTTPS query string; the adapter never logs the URL and redacts network errors. Chastify time-change requests are not retried automatically.
 
 ## Settings backup and restore
 
