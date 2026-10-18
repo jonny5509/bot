@@ -13,8 +13,8 @@ static const char *AP_NAME="TimerSync-Setup";
 String setupApPassword(){char b[16];snprintf(b,sizeof(b),"TS-%012llX",(unsigned long long)(ESP.getEfuseMac() & 0xFFFFFFFFFFFFULL));return String(b);}
 static const uint32_t INTERVAL_MS=600000, HTTP_TIMEOUT_MS=12000;
 WebServer server(80); DNSServer dns; Preferences prefs;
-String caPem,wifiSsid,wifiPassword,adminPin,ct,cl,ft,fl,eu,ek;
-uint32_t maxAdd=2592000,lastAuto=0;
+String caPem,wifiSsid,wifiPassword,adminPin,ct,cl,ft,fl,eu,ek,webhookUrl;
+uint32_t maxAdd=2592000,lastAuto=0,lastReport=0;
 bool autoSync=false,busy=false;
 String lastStatus="Not run yet",lastRunAt="";
 
@@ -68,6 +68,19 @@ bool addSvc(int i,int64_t s,String &e){if(s<=0||s>INT32_MAX){e="Addition outside
 }
 bool auth(){String p=server.header("X-Admin-Pin");return adminPin.length()>=8&&p==adminPin;}
 void sendJ(int code,const String &s){server.sendHeader("Cache-Control","no-store");server.sendHeader("X-Content-Type-Options","nosniff");server.send(code,"application/json",s);}
+bool sendDiscord(const String &title,const String &message){
+ if(webhookUrl.isEmpty()||WiFi.status()!=WL_CONNECTED||caPem.isEmpty())return false;
+ if(!(webhookUrl.startsWith("https://discord.com/api/webhooks/")||webhookUrl.startsWith("https://canary.discord.com/api/webhooks/")||webhookUrl.startsWith("https://ptb.discord.com/api/webhooks/")))return false;
+ WiFiClientSecure client;client.setCACert(caPem.c_str());HTTPClient http;http.setTimeout(8000);
+ if(!http.begin(client,webhookUrl))return false;
+ http.addHeader("Content-Type","application/json");
+ JsonDocument payload;JsonArray embeds=payload["embeds"].to<JsonArray>();JsonObject embed=embeds.add<JsonObject>();
+ embed["title"]=title;embed["description"]=message.substring(0,1800);
+ bool failed=title.indexOf("failed")>=0||title.indexOf("error")>=0||message.indexOf("failed")>=0;
+ embed["color"]=failed?14243645:3057251;
+ String body;serializeJson(payload,body);
+ int code=http.POST(body);http.end();return code>=200&&code<300;
+}
 String stateJson(){return "{\"ok\":true,\"wifi\":"+String(WiFi.status()==WL_CONNECTED?"true":"false")+",\"ip\":\""+WiFi.localIP().toString()+"\",\"autoSync\":"+(autoSync?"true":"false")+",\"busy\":"+(busy?"true":"false")+",\"lastStatus\":\""+esc(lastStatus)+"\",\"lastRunAt\":\""+lastRunAt+"\"}";}
 String html(){return R"HTML(<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Timer Sync</title><style>body{font:16px system-ui;max-width:760px;margin:24px auto;padding:0 14px;background:#f4f6f8;color:#18202a}section{background:white;border:1px solid #ddd;border-radius:12px;padding:16px;margin:12px 0}input,button{font:inherit;padding:10px;margin:4px 0;max-width:100%;box-sizing:border-box}input{width:100%}button{cursor:pointer;border:0;border-radius:8px;background:#172b4d;color:white}pre{white-space:pre-wrap;overflow-wrap:anywhere}.muted{color:#596575}</style></head><body><h1>Timer Sync</h1><p class="muted">ESP32 local dashboard. Credentials are never sent back to the browser.</p>
 <section><h2>Timer preview</h2><button onclick="preview()">Refresh</button><pre id="p">Loading…</pre><button onclick="syncNow()">Sync now</button><button id="auto" onclick="toggleAuto()">Start automatic sync</button><pre id="s"></pre></section>
@@ -76,9 +89,9 @@ String html(){return R"HTML(<!doctype html><html><head><meta name="viewport" con
 <label>Chaster lock ID<input id="cl"></label><label>New Chaster token<input id="ct" type="password" autocomplete="new-password"></label>
 <label>Chastify lock ID (24 hex chars)<input id="fl"></label><label>New Chastify token<input id="ft" type="password" autocomplete="new-password"></label>
 <label>EmlaLock user ID<input id="eu"></label><label>New EmlaLock API key<input id="ek" type="password" autocomplete="new-password"></label>
-<label>Maximum addition (seconds)<input id="mx" type="number" min="0" max="31536000" value="2592000"></label><button>Save settings</button></form><pre id="r"></pre></section>
-<script>const $=x=>document.getElementById(x);function h(){return {'Content-Type':'application/json','X-Admin-Pin':$('pin').value}}async function api(u,o={}){let r=await fetch(u,{...o,headers:{...h(),...(o.headers||{})}}),j=await r.json();if(!r.ok)throw Error(j.message||'Request failed');return j}async function preview(){try{$('p').textContent=JSON.stringify(await api('/api/preview'),null,2)}catch(e){$('p').textContent=e.message}}async function status(){try{let s=await(await fetch('/api/state')).json();$('s').textContent=JSON.stringify(s,null,2);$('auto').textContent=s.autoSync?'Stop automatic sync':'Start automatic sync'}catch(e){}}async function syncNow(){if(!confirm('Send time additions? Check preview first.'))return;try{$('p').textContent=JSON.stringify(await api('/api/sync',{method:'POST',body:'{}'}),null,2)}catch(e){$('p').textContent=e.message}status()}async function toggleAuto(){try{let s=await api('/api/auto',{method:'POST',body:JSON.stringify({enabled:!((await(await fetch('/api/state')).json()).autoSync)})});$('s').textContent=JSON.stringify(s,null,2);status()}catch(e){$('s').textContent=e.message}}$('f').onsubmit=async e=>{e.preventDefault();try{let d={pin:$('newpin').value,chasterLock:$('cl').value,chasterToken:$('ct').value,chastifyLock:$('fl').value,chastifyToken:$('ft').value,emlaUser:$('eu').value,emlaKey:$('ek').value,maxAdditionSeconds:Number($('mx').value)};let x=await api('/api/settings',{method:'POST',body:JSON.stringify(d)});$('r').textContent=x.message;$('pin').value=$('newpin').value;$('ct').value=$('ft').value=$('ek').value=''}catch(e){$('r').textContent=e.message}};preview();status();setInterval(()=>{preview();status()},30000)</script></body></html>)HTML";}
-String runSyncCore(){
+<label>Discord webhook URL (optional; leave blank to keep saved URL)<input id="wh" type="password" autocomplete="new-password"></label><label>Maximum addition (seconds)<input id="mx" type="number" min="0" max="31536000" value="2592000"></label><button>Save settings</button></form><pre id="r"></pre></section>
+<script>const $=x=>document.getElementById(x);function h(){return {'Content-Type':'application/json','X-Admin-Pin':$('pin').value}}async function api(u,o={}){let r=await fetch(u,{...o,headers:{...h(),...(o.headers||{})}}),j=await r.json();if(!r.ok)throw Error(j.message||'Request failed');return j}async function preview(){try{$('p').textContent=JSON.stringify(await api('/api/preview'),null,2)}catch(e){$('p').textContent=e.message}}async function status(){try{let s=await(await fetch('/api/state')).json();$('s').textContent=JSON.stringify(s,null,2);$('auto').textContent=s.autoSync?'Stop automatic sync':'Start automatic sync'}catch(e){}}async function syncNow(){if(!confirm('Send time additions? Check preview first.'))return;try{$('p').textContent=JSON.stringify(await api('/api/sync',{method:'POST',body:'{}'}),null,2)}catch(e){$('p').textContent=e.message}status()}async function toggleAuto(){try{let s=await api('/api/auto',{method:'POST',body:JSON.stringify({enabled:!((await(await fetch('/api/state')).json()).autoSync)})});$('s').textContent=JSON.stringify(s,null,2);status()}catch(e){$('s').textContent=e.message}}$('f').onsubmit=async e=>{e.preventDefault();try{let d={pin:$('newpin').value,chasterLock:$('cl').value,chasterToken:$('ct').value,chastifyLock:$('fl').value,chastifyToken:$('ft').value,emlaUser:$('eu').value,emlaKey:$('ek').value,maxAdditionSeconds:Number($('mx').value),webhookUrl:$('wh').value};let x=await api('/api/settings',{method:'POST',body:JSON.stringify(d)});$('r').textContent=x.message;$('pin').value=$('newpin').value;$('ct').value=$('ft').value=$('ek').value=$('wh').value=''}catch(e){$('r').textContent=e.message}};preview();status();setInterval(()=>{preview();status()},30000)</script></body></html>)HTML";}
+String runSyncCoreInternal(){
  if(busy)return "{\"ok\":false,\"message\":\"A sync is already running.\"}";
  busy=true;Reading r[3]={{"chaster",false,0,""},{"chastify",false,0,""},{"emlalock",false,0,""}};bool all=true;int64_t target=0;
  for(int i=0;i<3;i++){r[i].ok=readSvc(i,r[i].seconds,r[i].error);if(!r[i].ok)all=false;else target=max(target,r[i].seconds);}
@@ -91,7 +104,13 @@ String runSyncCore(){
  busy=false;lastRunAt=String((uint32_t)(millis()/1000))+"s since boot";lastStatus=ok?"Writes accepted and verification reads succeeded.":failure;
  return "{\"ok\":"+(ok?String("true"):String("false"))+",\"message\":\""+esc(lastStatus)+"\"}";
 }
-void load(){prefs.begin("timersync",true);wifiSsid=prefs.getString("ssid","");wifiPassword=prefs.getString("wpass","");adminPin=prefs.getString("pin","");
+String runSyncCore(){
+ String result=runSyncCoreInternal();JsonDocument d;parse(result,d);bool ok=d["ok"]|false;String message=d["message"]|String("Sync completed; inspect the dashboard.");
+ sendDiscord(ok?"Timer Sync - ESP32 sync successful":"Timer Sync - ESP32 sync failed",message);
+ return result;
+}
+
+void load(){prefs.begin("timersync",true);wifiSsid=prefs.getString("ssid","");wifiPassword=prefs.getString("wpass","");adminPin=prefs.getString("pin","");webhookUrl=prefs.getString("webhook","");
  cl=prefs.getString("cl","");ct=prefs.getString("ct","");fl=prefs.getString("fl","");ft=prefs.getString("ft","");eu=prefs.getString("eu","");ek=prefs.getString("ek","");maxAdd=prefs.getUInt("maxadd",2592000);prefs.end();}
 void saveSettings(){
  if(adminPin.length() && !auth()){sendJ(401,"{\"ok\":false,\"message\":\"PIN incorrect.\"}");return;}
@@ -101,6 +120,7 @@ void saveSettings(){
  prefs.begin("timersync",false);prefs.putString("pin",pin);String v;
  #define SAVE_FIELD(field,key) v=d[field]|String("");if(!v.isEmpty())prefs.putString(key,v)
  SAVE_FIELD("chasterLock","cl");SAVE_FIELD("chasterToken","ct");SAVE_FIELD("chastifyLock","fl");SAVE_FIELD("chastifyToken","ft");SAVE_FIELD("emlaUser","eu");SAVE_FIELD("emlaKey","ek");
+ v=d["webhookUrl"]|String("");if(!v.isEmpty()){if(!(v.startsWith("https://discord.com/api/webhooks/")||v.startsWith("https://canary.discord.com/api/webhooks/")||v.startsWith("https://ptb.discord.com/api/webhooks/"))){prefs.end();sendJ(400,"{\"ok\":false,\"message\":\"Use a valid HTTPS Discord webhook URL.\"}");return;}prefs.putString("webhook",v);}
  prefs.putUInt("maxadd",(uint32_t)mx);prefs.end();load();sendJ(200,"{\"ok\":true,\"message\":\"Saved. Secrets are never returned to the browser.\"}");
 }
 void setupPortal(){
@@ -137,5 +157,6 @@ void setup(){
 void loop(){
  if(WiFi.getMode()==WIFI_AP_STA)dns.processNextRequest();server.handleClient();
  if(autoSync&&!busy&&WiFi.status()==WL_CONNECTED&&millis()-lastAuto>=INTERVAL_MS){lastAuto=millis();lastStatus=runSyncCore();}
+ if(WiFi.status()==WL_CONNECTED&&millis()-lastReport>=21600000UL){lastReport=millis();sendDiscord("Timer Sync - ESP32 periodic status report","Wi-Fi connected. Automatic sync: "+String(autoSync?"enabled":"disabled")+". Last sync status: "+lastStatus+".");}
  delay(2);
 }
