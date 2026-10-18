@@ -22,7 +22,19 @@ async function previewSync() {
     } catch (e) { return { service: a.service, ok: false, error: e.message }; }
   }));
   const valid = readings.filter(x => x.ok);
-  if (!valid.length) return { ok: false, message: "No service adapter returned a timer. The provider adapters must be implemented before live sync can work.", readings, changes: [] };
+  const configuredAdapters = adapters.filter(a => a.configured);
+  const allThreeConfigured = adapters.length === 3 && adapters.every(a => a.configured);
+  const allReadable = valid.length === adapters.length && readings.every(x => x.ok);
+  const allWritable = adapters.every(a => a.canAddTime === true);
+  if (!valid.length) return { ok: false, message: "No service adapter returned a timer. Check setup and API access.", readings, changes: [] };
+  if (!allThreeConfigured || !allReadable || !allWritable) {
+    return {
+      ok: false,
+      message: "Preview only: all three services must be configured and readable, and each provider must support verified time additions before sync can run. Chaster reading is currently read-only; no changes were sent.",
+      readings,
+      changes: []
+    };
+  }
   const targetSeconds = Math.max(...valid.map(x => x.seconds));
   return {
     ok: true, targetSeconds, target: duration(targetSeconds), readings,
