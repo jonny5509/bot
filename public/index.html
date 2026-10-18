@@ -29,6 +29,7 @@
 <label>Maximum time addition (hours) <input name="maxHours" type="number" min="0" max="8760" value="720"></label>
 <div id="integrations"></div><button class="primary" type="submit">Save settings</button>
 </form><p class="muted small">Restart the app after changing the Discord bot token or application/server IDs. IDs are not secret, but are stored locally.</p>
+<div class="reset-zone"><h3>Factory reset</h3><p>This permanently deletes saved settings, encrypted service/Discord tokens, local logs, and the local .env file. Automatic sync will stop. This cannot delete messages already sent to Discord or revoke tokens at their providers.</p><button id="factoryReset" class="danger">Factory reset — erase all local data</button></div>
 </section>
 <section id="logs" class="page hidden"><div class="section-head"><h2>Recent logs</h2><button id="refreshLogs">Refresh</button></div><div id="logList" class="log-list"></div></section>
 <div id="toast" role="status" aria-live="polite"></div>
