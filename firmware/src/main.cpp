@@ -156,7 +156,7 @@ void setup(){
 }
 void loop(){
  if(WiFi.getMode()==WIFI_AP_STA)dns.processNextRequest();server.handleClient();
- if(autoSync&&!busy&&WiFi.status()==WL_CONNECTED&&millis()-lastAuto>=INTERVAL_MS){lastAuto=millis();lastStatus=runSyncCore();}
+ if(autoSync&&!busy&&WiFi.status()==WL_CONNECTED&&millis()-lastAuto>=INTERVAL_MS){lastAuto=millis();String result=runSyncCore();JsonDocument syncState;parse(result,syncState);lastStatus=syncState["message"]|String("Sync completed.");}
  if(WiFi.status()==WL_CONNECTED&&millis()-lastReport>=21600000UL){lastReport=millis();sendDiscord("Timer Sync - ESP32 periodic status report","Wi-Fi connected. Automatic sync: "+String(autoSync?"enabled":"disabled")+". Last sync status: "+lastStatus+".");}
  delay(2);
 }
