@@ -35,4 +35,5 @@ async function logEvent(level, message, details = {}) {
   return entry;
 }
 function getRecentLogs() { return recent; }
-module.exports = { setDiscordClient, logEvent, getRecentLogs };
+function clearRecentLogs() { recent = []; }
+module.exports = { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs };
