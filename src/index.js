@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { loadSettings, saveSettings, publicSettings } = require("./config");
 const { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs, sendWebhook } = require("./logger");
@@ -9,7 +10,7 @@ const { previewSync, runSync } = require("./sync");
 const { createSettingsBackup, restoreSettingsBackup } = require("./backup");
 
 const app = express();
-const HOST = process.env.HOST || "127.0.0.1";
+const HOST = process.env.HOST || "0.0.0.0";
 const PORT = Number(process.env.PORT || 3000);
 const INTERVAL_MS = 10 * 60 * 1000;
 let autoRunning = false; // Deliberately reset to STOPPED every time the app starts.
@@ -225,8 +226,36 @@ async function startDiscord() {
   }
 }
 
+function getLocalIPv4Addresses() {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const [name, entries] of Object.entries(interfaces)) {
+    for (const entry of entries || []) {
+      if (entry.family !== "IPv4" || entry.internal) continue;
+      addresses.push({ name, address: entry.address });
+    }
+  }
+  // Prefer ordinary physical/Wi-Fi adapters over common virtual adapters.
+  addresses.sort((a, b) => {
+    const virtual = /virtual|vethernet|wsl|docker|vmware|virtualbox|loopback/i;
+    return Number(virtual.test(a.name)) - Number(virtual.test(b.name));
+  });
+  return addresses;
+}
+
 app.listen(PORT, HOST, async () => {
-  console.log("Dashboard: http://" + HOST + ":" + PORT);
+  const addresses = getLocalIPv4Addresses();
+  if (HOST === "0.0.0.0" || HOST === "::") {
+    if (addresses.length) {
+      console.log("Dashboard URLs:");
+      for (const entry of addresses) console.log("  http://" + entry.address + ":" + PORT + " (" + entry.name + ")");
+    } else {
+      console.log("Dashboard: http://127.0.0.1:" + PORT);
+    }
+  } else {
+    console.log("Dashboard: http://" + HOST + ":" + PORT);
+  }
+  console.warn("Network access is enabled when bound to 0.0.0.0. Use only on a trusted network; the dashboard has no login.");
   await logEvent("info", "Time Sync Bot started. Automatic sync is STOPPED by default.");
   await startDiscord();
   // Send a lightweight health report every six hours while this process is alive.
