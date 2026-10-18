@@ -40,7 +40,7 @@ if not exist .env (
 )
 
 set "HOST=0.0.0.0"
-for /f "delims=" %%I in ('node -e "const os=require('node:os');const all=Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(x=>x.family==='IPv4'&&!x.internal).map(x=>({name,address:x.address})));all.sort((a,b)=>Number(/virtual|vethernet|wsl|docker|vmware|virtualbox/i.test(a.name))-Number(/virtual|vethernet|wsl|docker|vmware|virtualbox/i.test(b.name)));console.log(all[0]?.address||'127.0.0.1')"') do set "DASHBOARD_IP=%%I"
+for /f "delims=" %%I in ('node -e "const os=require(`node:os`);const all=Object.entries(os.networkInterfaces()).flatMap(([name,entries])=>entries.filter(x=>x.family===`IPv4`&&!x.internal).map(x=>({name,address:x.address})));all.sort((a,b)=>Number(/virtual|vethernet|wsl|docker|vmware|virtualbox/i.test(a.name))-Number(/virtual|vethernet|wsl|docker|vmware|virtualbox/i.test(b.name)));console.log(all[0]?.address||`127.0.0.1`)"') do set "DASHBOARD_IP=%%I"
 if not defined DASHBOARD_IP set "DASHBOARD_IP=127.0.0.1"
 start "Open Time Sync Dashboard" cmd /c "ping 127.0.0.1 -n 3 >nul & start http://%DASHBOARD_IP%:3000"
 npm start
