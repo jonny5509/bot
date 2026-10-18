@@ -107,6 +107,7 @@ app.post("/api/settings", async (req, res) => {
     if (!incoming) continue;
     settings.integrations[name].enabled = Boolean(incoming.enabled);
     if (incoming.timerId !== undefined) settings.integrations[name].timerId = String(incoming.timerId).trim().slice(0, 200);
+    if (incoming.userId !== undefined) settings.integrations[name].userId = String(incoming.userId).trim().slice(0, 100);
     if (typeof incoming.apiToken === "string" && incoming.apiToken.trim()) settings.integrations[name].apiToken = incoming.apiToken.trim();
     if (incoming.clearToken === true) settings.integrations[name].apiToken = "";
   }
