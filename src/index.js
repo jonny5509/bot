@@ -87,7 +87,7 @@ app.post("/api/sync", async (_req, res) => {
 });
 app.get("/api/settings", (_req, res) => res.json(publicSettings(loadSettings())));
 
-// Portable backups encrypt the complet
+app.post("/api/backup", (req, res) => {
   const passphrase = req.body && req.body.passphrase;
   if (typeof passphrase !== "string" || passphrase.length < 12 || passphrase.length > 1024) {
     return res.status(400).json({ ok: false, message: "Use a backup passphrase of at least 12 characters." });
