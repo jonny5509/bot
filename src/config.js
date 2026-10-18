@@ -11,9 +11,9 @@ const defaults = {
   discordBotToken: "",
   maxAdditionSeconds: 2592000,
   integrations: {
-    chaster: { enabled: false, apiToken: "", timerId: "" },
-    chastify: { enabled: false, apiToken: "", timerId: "" },
-    emlalock: { enabled: false, apiToken: "", timerId: "" }
+    chaster: { enabled: false, apiToken: "", timerId: "", userId: "" },
+    chastify: { enabled: false, apiToken: "", timerId: "", userId: "" },
+    emlalock: { enabled: false, apiToken: "", timerId: "", userId: "" }
   }
 };
 
@@ -31,7 +31,7 @@ function loadSettings() {
     merged.discordBotToken = decryptSecret(merged.discordBotToken || "");
     for (const key of Object.keys(merged.integrations)) {
       const item = merged.integrations[key] || {};
-      merged.integrations[key] = { enabled: false, apiToken: "", timerId: "", ...item };
+      merged.integrations[key] = { enabled: false, apiToken: "", timerId: "", userId: "", ...item };
       merged.integrations[key].apiToken = decryptSecret(merged.integrations[key].apiToken || "");
     }
     return merged;
@@ -59,7 +59,7 @@ function publicSettings(s) {
     discordTokenConfigured: Boolean(s.discordBotToken),
     maxAdditionSeconds: s.maxAdditionSeconds,
     integrations: Object.fromEntries(Object.entries(s.integrations).map(([name, v]) => [name, {
-      enabled: Boolean(v.enabled), timerId: v.timerId || "", tokenConfigured: Boolean(v.apiToken)
+      enabled: Boolean(v.enabled), timerId: v.timerId || "", userId: v.userId || "", tokenConfigured: Boolean(v.apiToken)
     }]))
   };
 }
