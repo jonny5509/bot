@@ -34,19 +34,37 @@ async function checkNow(source) {
   });
   return lastResult;
 }
+
+// Schedule against wall-clock boundaries (:00, :10, :20, ...), rather than
+// measuring ten minutes from app start or from the end of the last check.
+function scheduleNextBoundary() {
+  if (!autoRunning) return;
+  const delay = INTERVAL_MS - (Date.now() % INTERVAL_MS);
+  interval = setTimeout(async () => {
+    interval = null;
+    if (!autoRunning) return;
+    try {
+      await checkNow("automatic");
+    } catch (e) {
+      await logEvent("error", "Automatic check failed.", { error: e.message });
+    }
+    // Recompute from the clock after the check; if it ran long, skip missed
+    // boundaries rather than launching overlapping catch-up checks.
+    if (autoRunning) scheduleNextBoundary();
+  }, delay);
+}
+
 function startScheduler() {
   if (autoRunning) return false;
   autoRunning = true;
-  interval = setInterval(() => {
-    checkNow("automatic").catch(e => logEvent("error", "Automatic check failed.", { error: e.message }));
-  }, INTERVAL_MS);
-  logEvent("info", "Automatic sync started.", { interval: "10 minutes" });
+  scheduleNextBoundary();
+  logEvent("info", "Automatic sync started. First check will run at the next 10-minute clock boundary.", { interval: "10 minutes", schedule: "wall-clock boundaries" });
   return true;
 }
 function stopScheduler() {
   if (!autoRunning) return false;
   autoRunning = false;
-  if (interval) clearInterval(interval);
+  if (interval) clearTimeout(interval);
   interval = null;
   logEvent("info", "Automatic sync stopped.");
   return true;
@@ -147,8 +165,8 @@ async function startDiscord() {
     discordClient.on("interactionCreate", async interaction => {
       if (!interaction.isChatInputCommand() || interaction.commandName !== "timesync") return;
       const sub = interaction.options.getSubcommand();
-      if (sub === "status") return interaction.reply({ ephemeral: true, content: "Automatic mode: " + (autoRunning ? "RUNNING" : "STOPPED") + "\nInterval: 10 minutes\nLast check: " + (lastCheckAt || "Never") });
-      if (sub === "start") return interaction.reply({ ephemeral: true, content: startScheduler() ? "Automatic sync started; checks every 10 minutes." : "Automatic sync is already running." });
+      if (sub === "status") return interaction.reply({ ephemeral: true, content: "Automatic mode: " + (autoRunning ? "RUNNING" : "STOPPED") + "\nInterval: 10 minutes\nSchedule: wall-clock boundaries (:00, :10, :20, ...)\nLast check: " + (lastCheckAt || "Never") });
+      if (sub === "start") return interaction.reply({ ephemeral: true, content: startScheduler() ? "Automatic sync enabled. First check is at the next 10-minute clock boundary; then every 10 minutes." : "Automatic sync is already running." });
       if (sub === "stop") return interaction.reply({ ephemeral: true, content: stopScheduler() ? "Automatic sync stopped. Manual sync remains available." : "Automatic sync is already stopped." });
       if (sub === "preview") {
         await interaction.deferReply({ ephemeral: true });
