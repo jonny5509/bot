@@ -53,11 +53,38 @@ test("EmlaLock reads Unix seconds and adds seconds without exposing API key in e
   assert.equal(calls[1].url.searchParams.get("value"), "600");
 });
 
-test("Chaster writes remain blocked until its update-time schema is verified", async () => {
+test("Chaster reads a lock and adds the requested duration in seconds", async t => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const calls = [];
+  global.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    if (options.method === "POST") return response({ ok: true });
+    return response({ lock: { endDate: new Date(Date.now() + 3600_000).toISOString() } });
+  };
+  const adapter = getAdapters({ integrations: {
+    chaster: { enabled: true, apiToken: "test-token", timerId: "lock/with spaces" },
+    chastify: {}, emlalock: {}
+  }}).find(x => x.service === "chaster");
+  assert.equal(adapter.canAddTime, true);
+  const remaining = await adapter.readRemainingSeconds();
+  assert.ok(remaining > 3500 && remaining <= 3600);
+  await adapter.addSeconds(675608);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, "https://api.chaster.app/locks/lock%2Fwith%20spaces");
+  assert.equal(calls[1].url, "https://api.chaster.app/locks/lock%2Fwith%20spaces/update-time");
+  assert.equal(calls[1].options.method, "POST");
+  assert.equal(calls[1].options.headers.Authorization, "Bearer test-token");
+  assert.equal(calls[1].options.headers["Content-Type"], "application/json");
+  assert.deepEqual(JSON.parse(calls[1].options.body), { duration: 675608 });
+});
+
+test("Chaster rejects zero, negative, fractional, or unsafe additions", async () => {
   const adapter = getAdapters({ integrations: {
     chaster: { enabled: true, apiToken: "test-token", timerId: "test-lock" },
     chastify: {}, emlalock: {}
   }}).find(x => x.service === "chaster");
-  assert.equal(adapter.canAddTime, false);
-  await assert.rejects(() => adapter.addSeconds(60), /schema is verified/);
+  for (const seconds of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(() => adapter.addSeconds(seconds), /positive whole number of seconds/);
+  }
 });
