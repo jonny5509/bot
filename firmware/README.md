@@ -14,13 +14,13 @@ TLS validation is mandatory. The firmware does not call `setInsecure()`; HTTPS f
 
 ## Wi-Fi setup
 
-1. On first boot the ESP32 creates a Wi-Fi network named `TimerSync-Setup`.
+1. On first boot the ESP32 creates a WPA2-protected Wi-Fi network named `TimerSync-Setup`. The unique setup password is printed in Serial Monitor at 115200 baud; it is derived from that board's MAC address.
 2. Connect from your phone and open http://192.168.4.1.
 3. Enter your home Wi-Fi SSID/password and save; the ESP32 restarts.
 4. Open the local IP printed in Serial Monitor from a device on the same home Wi-Fi.
 5. Set an admin PIN of at least 8 characters and enter provider lock IDs and credentials.
 
-The setup AP is open during configuration; use it only in a private location and disconnect when finished. If Wi-Fi connection fails, the setup AP starts again.
+The setup AP has a device-specific password, but its password is printed over serial; keep physical access to the board and serial output private. Disconnect from the setup AP when finished. If Wi-Fi connection fails, the setup AP starts again.
 
 ## Behavior
 
