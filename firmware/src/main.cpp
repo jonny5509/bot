@@ -35,13 +35,23 @@ bool requestJson(const String &url,const String &method,const String &token,cons
  if(code<200||code>=300){err=(code==401||code==403)?"Authentication/permission rejected (HTTP "+String(code)+").":code<0?"Network/TLS error; outcome may be uncertain, request not retried.":"Provider HTTP error "+String(code)+".";return false;}
  if(response.isEmpty()){out.clear();return true;}if(!parse(response,out)){err="Provider returned invalid JSON.";return false;}if(!out["error"].isNull()){err="Provider returned an API error.";return false;}return true;
 }
+// Convert a Gregorian UTC date to Unix seconds without relying on non-portable timegm().
+int64_t utcEpoch(int y,unsigned m,unsigned d,int h,int mi,int se){
+ y -= m <= 2;
+ const int era = (y >= 0 ? y : y - 399) / 400;
+ const unsigned yoe = (unsigned)(y - era * 400);
+ const unsigned doy = (153 * (m + (m > 2 ? (unsigned)-3 : 9)) + 2) / 5 + d - 1;
+ const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+ const int64_t days = (int64_t)era * 146097 + (int64_t)doe - 719468;
+ return days * 86400 + h * 3600 + mi * 60 + se;
+}
 bool readChaster(int64_t &s,String &e){
  JsonDocument d;if(!requestJson("https://api.chaster.app/locks/"+urlenc(cl),"GET",ct,"",d,e))return false;
  JsonVariantConst l=d.as<JsonVariantConst>();if(d["lock"].is<JsonObjectConst>())l=d["lock"].as<JsonVariantConst>();else if(d["data"].is<JsonObjectConst>())l=d["data"].as<JsonVariantConst>();
  JsonVariantConst endVal=l["endDate"];if(endVal.isNull())endVal=l["endDateTime"];if(endVal.isNull())endVal=l["timer"]["endDate"];if(endVal.isNull())endVal=l["session"]["endDate"];
  if(endVal.is<long long>() || endVal.is<double>()){double raw=endVal.as<double>();int64_t epoch=(int64_t)raw;if(epoch>0&&epoch<100000000000LL)epoch*=1000;time_t now=time(nullptr);if(now<100000){e="Clock not synchronized yet; wait for NTP.";return false;}s=max((int64_t)0,epoch/1000-(int64_t)now);return true;}
  String dt=endVal|String("");int y,mo,day,h,mi,se;if(sscanf(dt.c_str(),"%4d-%2d-%2dT%2d:%2d:%2d",&y,&mo,&day,&h,&mi,&se)!=6){e="Chaster end date not recognized.";return false;}
- struct tm t={};t.tm_year=y-1900;t.tm_mon=mo-1;t.tm_mday=day;t.tm_hour=h;t.tm_min=mi;t.tm_sec=se;time_t end=timegm(&t);
+ time_t end=(time_t)utcEpoch(y,(unsigned)mo,(unsigned)day,h,mi,se);
  int p=dt.indexOf('+');if(p<0)p=dt.lastIndexOf('-');if(p>10&&p+5<=(int)dt.length()){int sign=dt[p]=='+'?1:-1;end-=sign*(dt.substring(p+1,p+3).toInt()*3600+dt.substring(p+4,p+6).toInt()*60);}
  time_t now=time(nullptr);if(now<100000){e="Clock not synchronized yet; wait for NTP.";return false;}s=max((int64_t)0,(int64_t)end-(int64_t)now);return true;
 }
