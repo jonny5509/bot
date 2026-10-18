@@ -61,6 +61,7 @@ function getAdapters(settings) {
       return {
         service,
         configured,
+        canAddTime: false,
         async readRemainingSeconds() {
           if (!configured) throw new Error("Chaster is not configured");
           const value = await chasterRequest(config.apiToken, "/locks/" + encodeURIComponent(config.timerId));
@@ -76,6 +77,7 @@ function getAdapters(settings) {
     return {
       service,
       configured,
+      canAddTime: false,
       async readRemainingSeconds() { throw new AdapterNotReadyError(service); },
       async addSeconds(_seconds) { throw new AdapterNotReadyError(service); }
     };
