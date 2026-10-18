@@ -70,6 +70,8 @@ app.post("/api/settings", async (req, res) => {
   const body = req.body || {};
   const settings = loadSettings();
   if (body.discordLogChannelId !== undefined) settings.discordLogChannelId = String(body.discordLogChannelId).trim().slice(0, 100);
+  if (body.discordClientId !== undefined) settings.discordClientId = String(body.discordClientId).trim().slice(0, 100);
+  if (body.discordGuildId !== undefined) settings.discordGuildId = String(body.discordGuildId).trim().slice(0, 100);
   if (body.discordBotToken && String(body.discordBotToken).trim()) settings.discordBotToken = String(body.discordBotToken).trim();
   if (body.clearDiscordBotToken === true) settings.discordBotToken = "";
   if (body.maxAdditionSeconds !== undefined) {
@@ -98,7 +100,9 @@ app.post("/api/settings", async (req, res) => {
 async function startDiscord() {
   const settings = loadSettings();
   const token = settings.discordBotToken;
-  if (!token || !process.env.DISCORD_CLIENT_ID) {
+  const clientId = settings.discordClientId || process.env.DISCORD_CLIENT_ID;
+  const guildId = settings.discordGuildId || process.env.DISCORD_GUILD_ID;
+  if (!token || !clientId) {
     console.log("Discord is not configured yet. Add bot token and application ID in Setup/.env.");
     return;
   }
@@ -114,7 +118,7 @@ async function startDiscord() {
     const rest = new REST({ version: "10" }).setToken(token);
     const route = process.env.DISCORD_GUILD_ID
       ? Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID)
-      : Routes.applicationCommands(process.env.DISCORD_CLIENT_ID);
+      : Routes.applicationCommands(clientId);
     await rest.put(route, { body: [command.toJSON()] });
     discordClient.on("interactionCreate", async interaction => {
       if (!interaction.isChatInputCommand() || interaction.commandName !== "timesync") return;
