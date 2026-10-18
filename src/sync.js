@@ -31,7 +31,11 @@ async function previewSync() {
     };
   }
   const targetSeconds = Math.max(...readings.map(x => x.seconds));
-  const writable = adapters.every(a => a.canAddTime === true);
+  const blockedServices = adapters.filter(a => a.canAddTime !== true).map(a => a.service);
+  const writable = blockedServices.length === 0;
+  const writeBlockReason = blockedServices.map(service => service === "chaster"
+    ? "Chaster time-writing is disabled because the published API request schema does not define a safe request body"
+    : service + " time-writing is disabled in this build").join("; ");
   const changes = readings.map(x => ({
     service: x.service, beforeSeconds: x.seconds, before: duration(x.seconds),
     addSeconds: targetSeconds - x.seconds, add: duration(targetSeconds - x.seconds),
@@ -39,8 +43,10 @@ async function previewSync() {
     allowed: targetSeconds - x.seconds <= Number(settings.maxAdditionSeconds)
   }));
   return {
-    ok: true, writable, targetSeconds, target: duration(targetSeconds), readings, changes,
-    message: writable ? "All integrations are readable and support writes." : "Preview only: at least one provider is read-only or its write schema is unverified. No changes will be sent."
+    ok: true, writable, blockedServices, targetSeconds, target: duration(targetSeconds), readings, changes,
+    message: writable
+      ? "All integrations are readable and support writes."
+      : "Preview only. Live synchronization is blocked: " + writeBlockReason + ". No timer changes will be sent."
   };
 }
 
