@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
 const { loadSettings, saveSettings, publicSettings } = require("./config");
-const { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs } = require("./logger");
+const { setDiscordClient, logEvent, getRecentLogs, clearRecentLogs, sendWebhook } = require("./logger");
 const { previewSync, runSync } = require("./sync");
 const { createSettingsBackup, restoreSettingsBackup } = require("./backup");
 
@@ -29,10 +29,15 @@ function getState() { return { autoRunning, intervalMinutes: 10, lastCheckAt, la
 async function checkNow(source) {
   lastCheckAt = new Date().toISOString();
   lastResult = await runSync();
-  await logEvent("info", "Synchronization check completed (" + source + ").", {
+  const details = {
+    device: "Windows",
+    trigger: source,
     successful: Boolean(lastResult.ok),
     changed: (lastResult.changes || []).filter(x => x.status === "changed").length
-  });
+  };
+  await logEvent(lastResult.ok ? "info" : "error", "Synchronization check completed (" + source + ").", details);
+  const changes = (lastResult.changes || []).map(x => x.service + ": " + (x.status || (x.ok ? "readable" : "failed")) + (x.add ? " (add " + x.add + ")" : "") + (x.error ? " — " + x.error : "")).join(nl);
+  await sendWebhook(lastResult.ok ? "Timer Sync · Sync successful" : "Timer Sync · Sync failed", String(lastResult.message || "Sync check completed.") + (changes ? nl + changes : ""), details);
   return lastResult;
 }
 
@@ -224,6 +229,25 @@ app.listen(PORT, HOST, async () => {
   console.log("Dashboard: http://" + HOST + ":" + PORT);
   await logEvent("info", "Time Sync Bot started. Automatic sync is STOPPED by default.");
   await startDiscord();
+  // Send a lightweight health report every six hours while this process is alive.
+  setInterval(async () => {
+    try {
+      const preview = await previewSync();
+      const details = {
+        device: "Windows",
+        automaticSync: autoRunning ? "running" : "stopped",
+        lastCheck: lastCheckAt || "never",
+        lastResult: lastResult ? (lastResult.ok ? "success" : "failure") : "not run yet",
+        timersReadable: preview.ok ? "yes" : "no"
+      };
+      const summary = preview.ok
+        ? "All configured timer readings are available. Current target: " + preview.target + "."
+        : "Timer readings are incomplete or unavailable. " + String(preview.message || "Check the local dashboard.");
+      await sendWebhook("Timer Sync · Periodic status report", summary, details);
+    } catch (e) {
+      await sendWebhook("Timer Sync · Periodic status report", "Status report could not complete; check the Windows dashboard.", { device: "Windows", error: e.message });
+    }
+  }, 6 * 60 * 60 * 1000);
 });
 process.on("SIGINT", () => { stopScheduler(); if (discordClient) discordClient.destroy(); process.exit(0); });
 process.on("SIGTERM", () => { stopScheduler(); if (discordClient) discordClient.destroy(); process.exit(0); });
