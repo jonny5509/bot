@@ -1,0 +1,153 @@
+require("dotenv").config();
+const express = require("express");
+const path = require("node:path");
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
+const { loadSettings, saveSettings, publicSettings } = require("./config");
+const { setDiscordClient, logEvent, getRecentLogs } = require("./logger");
+const { previewSync, runSync } = require("./sync");
+
+const app = express();
+const HOST = process.env.HOST || "127.0.0.1";
+const PORT = Number(process.env.PORT || 3000);
+const INTERVAL_MS = 10 * 60 * 1000;
+let autoRunning = false; // Deliberately reset to STOPPED every time the app starts.
+let interval = null, lastCheckAt = null, lastResult = null, discordClient = null;
+
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+app.use(express.json({ limit: "32kb" }));
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+function getState() { return { autoRunning, intervalMinutes: 10, lastCheckAt, lastResult }; }
+async function checkNow(source) {
+  lastCheckAt = new Date().toISOString();
+  lastResult = await runSync();
+  await logEvent("info", "Synchronization check completed (" + source + ").", {
+    successful: Boolean(lastResult.ok),
+    changed: (lastResult.changes || []).filter(x => x.status === "changed").length
+  });
+  return lastResult;
+}
+function startScheduler() {
+  if (autoRunning) return false;
+  autoRunning = true;
+  interval = setInterval(() => {
+    checkNow("automatic").catch(e => logEvent("error", "Automatic check failed.", { error: e.message }));
+  }, INTERVAL_MS);
+  logEvent("info", "Automatic sync started.", { interval: "10 minutes" });
+  return true;
+}
+function stopScheduler() {
+  if (!autoRunning) return false;
+  autoRunning = false;
+  if (interval) clearInterval(interval);
+  interval = null;
+  logEvent("info", "Automatic sync stopped.");
+  return true;
+}
+
+app.get("/api/state", (_req, res) => res.json(getState()));
+app.get("/api/logs", (_req, res) => res.json(getRecentLogs()));
+app.get("/api/preview", async (_req, res) => {
+  try { res.json(await previewSync()); }
+  catch (e) { res.status(500).json({ ok: false, message: e.message }); }
+});
+app.post("/api/start", (_req, res) => res.json({ ok: true, changed: startScheduler(), ...getState() }));
+app.post("/api/stop", (_req, res) => res.json({ ok: true, changed: stopScheduler(), ...getState() }));
+app.post("/api/sync", async (_req, res) => {
+  try {
+    const result = await checkNow("manual");
+    res.status(result.ok ? 200 : 400).json(result);
+  } catch (e) { res.status(500).json({ ok: false, message: e.message }); }
+});
+app.get("/api/settings", (_req, res) => res.json(publicSettings(loadSettings())));
+app.post("/api/settings", async (req, res) => {
+  const body = req.body || {};
+  const settings = loadSettings();
+  if (body.discordLogChannelId !== undefined) settings.discordLogChannelId = String(body.discordLogChannelId).trim().slice(0, 100);
+  if (body.discordBotToken && String(body.discordBotToken).trim()) settings.discordBotToken = String(body.discordBotToken).trim();
+  if (body.clearDiscordBotToken === true) settings.discordBotToken = "";
+  if (body.maxAdditionSeconds !== undefined) {
+    const n = Number(body.maxAdditionSeconds);
+    if (!Number.isInteger(n) || n < 0 || n > 365 * 86400) return res.status(400).json({ ok: false, message: "Maximum addition must be between 0 and 365 days." });
+    settings.maxAdditionSeconds = n;
+  }
+  for (const name of ["chaster", "chastify", "emlalock"]) {
+    const incoming = body.integrations && body.integrations[name];
+    if (!incoming) continue;
+    settings.integrations[name].enabled = Boolean(incoming.enabled);
+    if (incoming.timerId !== undefined) settings.integrations[name].timerId = String(incoming.timerId).trim().slice(0, 200);
+    if (typeof incoming.apiToken === "string" && incoming.apiToken.trim()) settings.integrations[name].apiToken = incoming.apiToken.trim();
+    if (incoming.clearToken === true) settings.integrations[name].apiToken = "";
+  }
+  try {
+    saveSettings(settings);
+    await logEvent("info", "Setup settings saved.", {
+      enabledIntegrations: Object.entries(settings.integrations).filter(([, v]) => v.enabled).map(([k]) => k).join(", ") || "none",
+      discordTokenConfigured: Boolean(settings.discordBotToken)
+    });
+    res.json({ ok: true, message: "Saved. Restart the app to apply Discord bot token changes." });
+  } catch (e) { res.status(500).json({ ok: false, message: "Could not save settings: " + e.message }); }
+});
+
+async function startDiscord() {
+  const settings = loadSettings();
+  const token = settings.discordBotToken;
+  if (!token || !process.env.DISCORD_CLIENT_ID) {
+    console.log("Discord is not configured yet. Add bot token and application ID in Setup/.env.");
+    return;
+  }
+  try {
+    discordClient = new Client({ intents: [GatewayIntentBits.Guilds] });
+    setDiscordClient(discordClient);
+    const command = new SlashCommandBuilder().setName("timesync").setDescription("Control the local time sync bot")
+      .addSubcommand(s => s.setName("status").setDescription("Show automatic sync status"))
+      .addSubcommand(s => s.setName("start").setDescription("Start checks every 10 minutes"))
+      .addSubcommand(s => s.setName("stop").setDescription("Stop automatic checks"))
+      .addSubcommand(s => s.setName("preview").setDescription("Preview timer differences"))
+      .addSubcommand(s => s.setName("run").setDescription("Run a manual sync now"));
+    const rest = new REST({ version: "10" }).setToken(token);
+    const route = process.env.DISCORD_GUILD_ID
+      ? Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID)
+      : Routes.applicationCommands(process.env.DISCORD_CLIENT_ID);
+    await rest.put(route, { body: [command.toJSON()] });
+    discordClient.on("interactionCreate", async interaction => {
+      if (!interaction.isChatInputCommand() || interaction.commandName !== "timesync") return;
+      const sub = interaction.options.getSubcommand();
+      if (sub === "status") return interaction.reply({ ephemeral: true, content: "Automatic mode: " + (autoRunning ? "RUNNING" : "STOPPED") + "\nInterval: 10 minutes\nLast check: " + (lastCheckAt || "Never") });
+      if (sub === "start") return interaction.reply({ ephemeral: true, content: startScheduler() ? "Automatic sync started; checks every 10 minutes." : "Automatic sync is already running." });
+      if (sub === "stop") return interaction.reply({ ephemeral: true, content: stopScheduler() ? "Automatic sync stopped. Manual sync remains available." : "Automatic sync is already stopped." });
+      if (sub === "preview") {
+        await interaction.deferReply({ ephemeral: true });
+        const p = await previewSync();
+        const text = p.ok ? "Target: " + p.target + "\n" + p.changes.map(x => x.service + ": " + x.before + " → " + x.target + " (add " + x.add + ")").join("\n") : p.message;
+        return interaction.editReply(text.slice(0, 1900));
+      }
+      if (sub === "run") {
+        await interaction.deferReply({ ephemeral: true });
+        const r = await checkNow("Discord manual");
+        const text = r.ok ? "Manual sync result. Target: " + r.target + "\n" + (r.changes || []).map(x => x.service + ": " + x.status + (x.add ? " (add " + x.add + ")" : "") + (x.error ? " — " + x.error : "")).join("\n") : r.message;
+        return interaction.editReply(text.slice(0, 1900));
+      }
+    });
+    await discordClient.login(token);
+    console.log("Discord bot connected.");
+  } catch (e) {
+    setDiscordClient(null);
+    discordClient = null;
+    console.error("Discord setup failed:", e.message);
+  }
+}
+
+app.listen(PORT, HOST, async () => {
+  console.log("Dashboard: http://" + HOST + ":" + PORT);
+  await logEvent("info", "Time Sync Bot started. Automatic sync is STOPPED by default.");
+  await startDiscord();
+});
+process.on("SIGINT", () => { stopScheduler(); if (discordClient) discordClient.destroy(); process.exit(0); });
+process.on("SIGTERM", () => { stopScheduler(); if (discordClient) discordClient.destroy(); process.exit(0); });
