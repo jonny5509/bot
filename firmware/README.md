@@ -27,7 +27,7 @@ The setup AP has a device-specific password, but its password is printed over se
 - Create an incoming webhook in your Discord channel and copy its URL.
 - Open the ESP32 dashboard on your home Wi-Fi, enter the webhook URL in Settings, and save. The URL is stored in Preferences/NVS and is never displayed back to the browser. Anyone with the URL can post to that channel, so keep the device and home LAN private.
 - The ESP32 sends a message after each manual or automatic sync result, plus a periodic status report every six hours while connected to Wi-Fi.
-- Leave the field blank to keep the previously saved URL. To remove a saved webhook, clear the `webhook` key from the `timersync` Preferences namespace using an appropriate maintenance/reset workflow.
+- Leave the field blank to keep the previously saved URL; tick **Clear saved webhook URL** to remove it.
 - HTTPS certificate validation is required; ensure `firmware/data/ca.pem` includes the root CA for Discord as well as all timer provider hosts.
 
 ## Behavior
