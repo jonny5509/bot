@@ -153,7 +153,7 @@ async function startDiscord() {
       if (sub === "preview") {
         await interaction.deferReply({ ephemeral: true });
         const p = await previewSync();
-        const text = p.ok ? "Target: " + p.target + "\n" + p.changes.map(x => x.service + ": " + x.before + " → " + x.target + " (add " + x.add + ")").join("\n") : p.message;
+        const text = p.ok ? (p.writable ? "" : "PREVIEW ONLY — no timer changes sent.\n") + "Target: " + p.target + "\n" + p.changes.map(x => x.service + ": " + x.before + " → " + x.target + " (add " + x.add + ")").join("\n") : p.message;
         return interaction.editReply(text.slice(0, 1900));
       }
       if (sub === "run") {
