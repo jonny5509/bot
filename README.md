@@ -26,7 +26,11 @@ Mocked adapter tests are included. After installing dependencies, run `npm test`
 1. Double-click `Start Time Sync.bat`.
 2. If Node.js 20 or newer is missing, the launcher downloads and installs the latest official Node.js LTS release automatically. Windows may ask for permission to install software.
 3. The launcher installs project dependencies on first run, starts the local server, and opens `http://127.0.0.1:3000`.
-4. In Setup, configure Chastify with its user-wide Developer API key and exact lock ID, EmlaLock with its User ID and API key, and Chaster with its Developer Token and lock ID.
+4. In Setup, follow the links beside each field to create or locate credentials:
+   - **Discord bot:** create an application and bot in the [Discord Developer Portal](https://discord.com/developers/applications). Get the bot token under **Bot** and the Application ID under **General Information**. Enable [Developer Mode](https://support.discord.com/hc/en-us/articles/206346498) to copy server and channel IDs.
+   - **Chaster:** request API access using the [getting-started guide](https://docs.chaster.app/api/basics/getting-started/), then generate a [developer token](https://docs.chaster.app/api/public-api/developer-token/). Use the lock ID for the intended lock.
+   - **Chastify:** create a user-wide Developer API key and review required scopes in the [official External API guide](https://docs.chastify.net/developer-api/external-api-programs/). Use the exact 24-character hexadecimal `lock._id` for the intended lock.
+   - **EmlaLock:** find your User ID and API key in your EmlaLock account Settings; see the [API guide](https://about.emlalock.com/wiki/api/) and [API reference](https://about.emlalock.com/docs/api/). No separate lock ID is needed.
 
 ## Security
 
