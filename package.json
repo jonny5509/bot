@@ -1,6 +1,6 @@
 {
   "name": "windows-time-sync-bot",
-  "version": "0.1.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Local time synchronization dashboard and Discord bot",
   "main": "src/index.js",
