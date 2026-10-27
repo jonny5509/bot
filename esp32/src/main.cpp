@@ -43,7 +43,7 @@ b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEcyMIIBIjANBgkqhkiG
 2/Ou8jqJkTx65qsGGmvPrC3oXgkkRLpimn7Wo6h+4FR1IAWsULecYxpsMNzaHxmx
 1x7e/dfgy5SDN67sH0NO3Xss0r0upS/kqbitOtSZpLYl6ZtrAGCSYP9PIUkY92eQ
 q2EGnI/yuum06ZIya7XzV+hdG82MHauVBJVJ8zUtluNJbd134/tJS7SsVQepj5Wz
-tCO7TG1F8PapspUwtP1MVYwnSlcUfIKdzXOS0zZKBgyMUNGPHgm+F6HmIcr9g+UQ
+tCO7TG1F1PapspUwtP1MVYwnSlcUfIKdzXOS0zZKBgyMUNGPHgm+F6HmIcr9g+UQ
 vIOlCsRnKPZzFBQ9RnbDhxSJITRNrw9FDKZJobq7nMWxM4MphQIDAQABo0IwQDAP
 BgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUTiJUIBiV
 5uNu5g/6+rkS7QYXjzkwDQYJKoZIhvcNAQELBQADggEBAGBnKJRvDkhj6zHd6mcY
@@ -431,7 +431,6 @@ static void discordHandleMessage(const String &payload) {
   if(op==7 || op==9) { discordIdentified=false; discordWs.disconnect(); return; }
   if(op!=0 || String((const char*)(d["t"]|""))!="INTERACTION_CREATE") return;
   JsonObject x=d["d"];
-  if(String((const char*)(x["type"]|""))=="") { /* interaction type is numeric; handled below */ }
   if((x["type"]|0)!=2 || String((const char*)(x["data"]["name"]|""))!="timesync") return;
   String interactionId=x["id"]|"", token=x["token"]|"", app=x["application_id"]|"";
   String sub=x["data"]["options"][0]["name"]|"";
@@ -539,7 +538,7 @@ static void handlePreview() {
 static void handleSync() {
   if(!authorized()) return;
   if(syncBusy) { sendJson(409,"{\"ok\":false,\"message\":\"A synchronization is already in progress.\"}"); return; }
-  sendJson(200,runSyncJson());
+  String result=runSyncJson(); discordWebhook("Manual timer sync result",discordResultSummary(result,false)); sendJson(200,result);
 }
 static void handleAutoGet() { if(!authorized()) return; sendJson(200,String("{\"enabled\":")+(autoSync?"true":"false")+"}"); }
 static void handleAutoSet() {
