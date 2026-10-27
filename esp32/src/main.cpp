@@ -26,7 +26,8 @@ struct Integration {
 static Integration chasterCfg, chastifyCfg, emlaCfg;
 static int maxAdditionSeconds = DEFAULT_MAX_ADDITION_SECONDS;
 static String lastStatus = "Ready";
-static String discordBotToken, discordApplicationId, discordGuildId, discordWebhookUrl;
+static String discordBotToken, discordApplicationId, discordGuildId, discordWebhookUrl, discordLogChannelId;
+static uint32_t lastDiscordHealthAt = 0;
 static WebSocketsClient discordWs;
 static bool discordEnabled = false, discordIdentified = false;
 static uint32_t discordHeartbeatMs = 0, discordLastHeartbeat = 0;
@@ -349,7 +350,7 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(
 <section><h2>Settings</h2><p class="muted">Blank API key fields preserve stored keys. Keys are never sent back to the browser. Protect this dashboard with its Basic Auth password and keep it on a trusted LAN.</p>
 <form id="settings"><div class="grid">
 <div class="svc"><h3>Wi-Fi / device</h3><p class="muted">Wi-Fi credentials are set in secrets.h before flashing.</p><label>Maximum addition (seconds)</label><input id="max" type="number" min="1" max="2592000" required></div>
-<div class="svc"><h3>Discord bot</h3><p class="muted">Optional. Create a bot in the Discord Developer Portal, enable it in your server, and keep its token private.</p><label>Bot token</label><input id="discordToken" type="password" autocomplete="new-password"><label>Application ID</label><input id="discordAppId" autocomplete="off"><label>Guild ID (recommended for instant command updates)</label><input id="discordGuildId" autocomplete="off"><label>Incoming webhook URL (optional notifications)</label><input id="discordWebhook" type="password" autocomplete="new-password"><small>Blank secret fields preserve saved values. Discord commands: /timesync status, start, stop, preview, run.</small></div>
+<div class="svc"><h3>Discord bot</h3><p class="muted">Optional. Create a bot in the Discord Developer Portal, enable it in your server, and keep its token private.</p><label>Bot token</label><input id="discordToken" type="password" autocomplete="new-password"><label>Application ID</label><input id="discordAppId" autocomplete="off"><label>Guild ID (recommended for instant command updates)</label><input id="discordGuildId" autocomplete="off"><label>Log channel ID (optional bot messages)</label><input id="discordLogChannelId" autocomplete="off"><label>Incoming webhook URL (optional notifications)</label><input id="discordWebhook" type="password" autocomplete="new-password"><small>Blank secret fields preserve saved values. Discord commands: /timesync status, start, stop, preview, run.</small></div>
 <div class="svc"><h3>Chaster</h3><label><input id="chasterEnabled" type="checkbox" style="width:auto"> Enabled</label><label>Bearer token</label><input id="chasterToken" type="password" autocomplete="new-password"><label>Lock ID</label><input id="chasterId" autocomplete="off"></div>
 <div class="svc"><h3>Chastify</h3><label><input id="chastifyEnabled" type="checkbox" style="width:auto"> Enabled</label><label>Developer API key</label><input id="chastifyToken" type="password" autocomplete="new-password"><label>Lock._id (24 hex chars)</label><input id="chastifyId" autocomplete="off" maxlength="24"></div>
 <div class="svc"><h3>EmlaLock</h3><label><input id="emlaEnabled" type="checkbox" style="width:auto"> Enabled</label><label>API key</label><input id="emlaToken" type="password" autocomplete="new-password"><label>User ID</label><input id="emlaId" autocomplete="off"></div>
@@ -362,8 +363,8 @@ async function preview(){ $('preview').disabled=true;try{show(await api('/api/pr
 $('preview').onclick=preview;
 $('sync').onclick=async()=>{if(!confirm('Send time-change requests to all three providers? Review the preview first.'))return;$('sync').disabled=true;try{show(await api('/api/sync','POST',{}))}catch(e){$('msg').textContent=e.message}finally{$('sync').disabled=false}};
 $('auto').onchange=async()=>{try{await api('/api/auto','POST',{enabled:$('auto').checked})}catch(e){$('msg').textContent=e.message;$('auto').checked=false}};
-$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),discordBotToken:$('discordToken').value,discordApplicationId:$('discordAppId').value,discordGuildId:$('discordGuildId').value,discordWebhookUrl:$('discordWebhook').value,integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n==='emla'?'emlalock':n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken','discordToken','discordWebhook'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
-async function loadSettings(){try{const d=await api('/api/settings');$('max').value=d.maxAdditionSeconds;$('discordAppId').value=d.discordApplicationId||'';$('discordGuildId').value=d.discordGuildId||'';for(const n of ['chaster','chastify','emlalock']){const p=n==='emlalock'?'emla':n;$(p+'Enabled').checked=d.integrations[n].enabled;$(p+'Id').value=n==='emlalock'?d.integrations[n].userId:d.integrations[n].timerId}}catch(e){$('msg').textContent=e.message}}
+$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),discordBotToken:$('discordToken').value,discordApplicationId:$('discordAppId').value,discordGuildId:$('discordGuildId').value,discordLogChannelId:$('discordLogChannelId').value,discordWebhookUrl:$('discordWebhook').value,integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n==='emla'?'emlalock':n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken','discordToken','discordWebhook'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
+async function loadSettings(){try{const d=await api('/api/settings');$('max').value=d.maxAdditionSeconds;$('discordAppId').value=d.discordApplicationId||'';$('discordGuildId').value=d.discordGuildId||'';$('discordLogChannelId').value=d.discordLogChannelId||'';for(const n of ['chaster','chastify','emlalock']){const p=n==='emlalock'?'emla':n;$(p+'Enabled').checked=d.integrations[n].enabled;$(p+'Id').value=n==='emlalock'?d.integrations[n].userId:d.integrations[n].timerId}}catch(e){$('msg').textContent=e.message}}
 loadSettings();preview();setInterval(async()=>{try{const d=await api('/api/auto');$('auto').checked=d.enabled}catch{}},15000);
 </script></body></html>
 )HTML";
@@ -386,7 +387,7 @@ static bool discordWebhook(const String &title,const String &message) {
   if(!discordWebhookUrl.length()) return false;
   if(!discordWebhookUrl.startsWith("https://discord.com/api/webhooks/") &&
      !discordWebhookUrl.startsWith("https://discordapp.com/api/webhooks/")) return false;
-  JsonDocument d; d["content"]="**"+title+"**\n"+message;
+  JsonDocument d; d["content"]="**"+title+"**\\n"+message;
   String body; serializeJson(d,body);
   WiFiClientSecure tls; tls.useBuiltinCACertBundle();
   HTTPClient http; http.setConnectTimeout(6000); http.setTimeout(8000);
@@ -394,6 +395,14 @@ static bool discordWebhook(const String &title,const String &message) {
   http.addHeader("Content-Type","application/json");
   int code=http.POST(body); http.end();
   return code>=200&&code<300;
+}
+static void discordNotify(const String &title,const String &message) {
+  discordWebhook(title,message);
+  if(discordLogChannelId.length() && discordBotToken.length()) {
+    JsonDocument d; d["content"]="**"+title+"**\\n"+message;
+    String body; serializeJson(d,body); String response;
+    discordHttp("POST","/channels/"+discordLogChannelId+"/messages",body,response);
+  }
 }
 static void discordReply(const String &id,const String &token,const String &content,bool deferred=false) {
   JsonDocument d; d["type"]=deferred?5:4;
@@ -466,12 +475,12 @@ static void discordHandleMessage(const String &payload) {
     bool changed=!autoSync; autoSync=true; time_t now=time(nullptr);
     lastAutoSlot=(now>1700000000)?(uint64_t)now/600:0;
     discordReply(interactionId,token,changed?"Automatic sync enabled. Checks run on 10-minute clock boundaries.":"Automatic sync is already running.");
-    discordWebhook("Automatic sync started","Discord command enabled automatic timer sync."); return;
+    discordNotify("Automatic sync started","Discord command enabled automatic timer sync."); return;
   }
   if(sub=="stop") {
     bool changed=autoSync; autoSync=false;
     discordReply(interactionId,token,changed?"Automatic sync stopped. Manual sync remains available.":"Automatic sync is already stopped.");
-    discordWebhook("Automatic sync stopped","Discord command stopped automatic timer sync."); return;
+    discordNotify("Automatic sync stopped","Discord command stopped automatic timer sync."); return;
   }
   if(sub=="preview") {
     discordReply(interactionId,token,"Checking all three timers…",true);
@@ -484,7 +493,7 @@ static void discordHandleMessage(const String &payload) {
     String raw=runSyncJson();
     String summary=discordResultSummary(raw,false);
     discordEditReply(app,token,summary);
-    discordWebhook("Timer sync result",summary);
+    discordNotify("Timer sync result",summary);
     return;
   }
 }
@@ -501,6 +510,7 @@ static void discordStart() {
   discordWs.onEvent(discordEvent);
   discordWs.setReconnectInterval(5000);
   discordWs.beginSslWithCA("gateway.discord.gg",443,"/?v=10&encoding=json",DISCORD_ROOT_CA);
+  lastDiscordHealthAt=millis();
   discordEnabled=true;
 }
 
@@ -508,7 +518,7 @@ static void sendJson(int code, const String &body) { server.send(code,"applicati
 static void handleRoot() { if(!authorized()) return; server.send_P(200,"text/html; charset=utf-8",INDEX_HTML); }
 static void handleGetSettings() {
   if(!authorized()) return;
-  String out="{\"maxAdditionSeconds\":"+String(maxAdditionSeconds)+",\"discordApplicationId\":"+jsonEscape(discordApplicationId)+",\"discordGuildId\":"+jsonEscape(discordGuildId)+",\"discordTokenConfigured\":"+(discordBotToken.length()?"true":"false")+",\"discordWebhookConfigured\":"+(discordWebhookUrl.length()?"true":"false")+",\"integrations\":{";
+  String out="{\"maxAdditionSeconds\":"+String(maxAdditionSeconds)+",\"discordApplicationId\":"+jsonEscape(discordApplicationId)+",\"discordGuildId\":"+jsonEscape(discordGuildId)+",\"discordLogChannelId\":"+jsonEscape(discordLogChannelId)+",\"discordTokenConfigured\":"+(discordBotToken.length()?"true":"false")+",\"discordWebhookConfigured\":"+(discordWebhookUrl.length()?"true":"false")+",\"integrations\":{";
   out+="\"chaster\":{\"enabled\":"+(chasterCfg.enabled?String("true"):String("false"))+",\"timerId\":"+jsonEscape(chasterCfg.timerId)+"},";
   out+="\"chastify\":{\"enabled\":"+(chastifyCfg.enabled?String("true"):String("false"))+",\"timerId\":"+jsonEscape(chastifyCfg.timerId)+"},";
   out+="\"emlalock\":{\"enabled\":"+(emlaCfg.enabled?String("true"):String("false"))+",\"userId\":"+jsonEscape(emlaCfg.userId)+"}}}";
@@ -538,10 +548,12 @@ static void handleSaveSettings() {
   if(incomingWebhook.length()) discordWebhookUrl=incomingWebhook;
   if(d["discordApplicationId"].is<const char*>()) discordApplicationId=String((const char*)d["discordApplicationId"]);
   if(d["discordGuildId"].is<const char*>()) discordGuildId=String((const char*)d["discordGuildId"]);
+  if(d["discordLogChannelId"].is<const char*>()) discordLogChannelId=String((const char*)d["discordLogChannelId"]);
   prefs.putInt("maxAdd",maxAdditionSeconds);
   prefs.putString("discordToken",discordBotToken);
   prefs.putString("discordApp",discordApplicationId);
   prefs.putString("discordGuild",discordGuildId);
+  prefs.putString("discordLogChannel",discordLogChannelId);
   prefs.putString("discordWebhook",discordWebhookUrl);
   auto save=[&](const char* key, const Integration &cfg) {
     String p=String(key)+"_";
@@ -561,7 +573,7 @@ static void handlePreview() {
 static void handleSync() {
   if(!authorized()) return;
   if(syncBusy) { sendJson(409,"{\"ok\":false,\"message\":\"A synchronization is already in progress.\"}"); return; }
-  String result=runSyncJson(); discordWebhook("Manual timer sync result",discordResultSummary(result,false)); sendJson(200,result);
+  String result=runSyncJson(); discordNotify("Manual timer sync result",discordResultSummary(result,false)); sendJson(200,result);
 }
 static void handleAutoGet() { if(!authorized()) return; sendJson(200,String("{\"enabled\":")+(autoSync?"true":"false")+"}"); }
 static void handleAutoSet() {
@@ -584,6 +596,7 @@ static void loadSaved() {
   discordBotToken=prefs.getString("discordToken","");
   discordApplicationId=prefs.getString("discordApp","");
   discordGuildId=prefs.getString("discordGuild","");
+  discordLogChannelId=prefs.getString("discordLogChannel","");
   discordWebhookUrl=prefs.getString("discordWebhook","");
 }
 static void setupRoutes() {
@@ -625,6 +638,14 @@ void loop() {
       String out; serializeJson(hb,out); discordWs.sendTXT(out); discordLastHeartbeat=millis();
     }
   }
+  if(discordEnabled && WiFi.status()==WL_CONNECTED && millis()-lastDiscordHealthAt>=21600000UL) {
+    lastDiscordHealthAt=millis();
+    Reading hr[3]; Change hc[3]; bool ready=false; int64_t target=0;
+    String raw=previewJson(ready,hr,hc,target);
+    String health=ready ? "All three timer readings are available. Target: "+durationText(target)+". Automatic sync is "+String(autoSync?"running":"stopped")+"."
+                        : "Timer readings are incomplete or unavailable. No timer changes were made.";
+    discordNotify("Periodic status report",health);
+  }
   if(autoSync && !syncBusy && WiFi.status()==WL_CONNECTED) {
     time_t now=time(nullptr);
     if(now>1700000000) {
@@ -632,7 +653,7 @@ void loop() {
       if(slot>lastAutoSlot) {
         lastAutoSlot=slot; // wall-clock :00, :10, :20 ... boundaries; missed slots are skipped.
         Serial.println("Automatic timer synchronization starting.");
-        String result=runSyncJson(); Serial.println(result); discordWebhook("Automatic timer sync result",discordResultSummary(result,false));
+        String result=runSyncJson(); Serial.println(result); discordNotify("Automatic timer sync result",discordResultSummary(result,false));
       }
     }
   }
