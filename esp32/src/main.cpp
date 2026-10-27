@@ -29,7 +29,7 @@ static String lastStatus = "Ready";
 static String discordBotToken, discordApplicationId, discordGuildId, discordWebhookUrl, discordLogChannelId;
 static uint32_t lastDiscordHealthAt = 0;
 static WebSocketsClient discordWs;
-static bool discordEnabled = false, discordIdentified = false;
+static bool discordEnabled = false, discordIdentified = false, discordCommandBusy = false;
 static uint32_t discordHeartbeatMs = 0, discordLastHeartbeat = 0;
 static int64_t discordSequence = -1;
 // DigiCert Global Root G2. TLS is verified; the client never falls back to insecure mode.
@@ -440,6 +440,26 @@ static void discordRegisterCommands() {
   if(discordHttp("PUT",route,body,response)) Serial.println("Discord slash commands registered.");
   else Serial.println("Discord command registration failed; check bot token, application ID, and bot scope.");
 }
+struct DiscordTaskArgs { String interactionId; String token; String app; bool run; };
+static void discordLongCommandTask(void *opaque) {
+  DiscordTaskArgs *args=static_cast<DiscordTaskArgs*>(opaque);
+  String interactionId=args->interactionId, token=args->token, app=args->app;
+  bool doRun=args->run;
+  delete args;
+  String raw;
+  if(doRun) {
+    raw=runSyncJson();
+    String summary=discordResultSummary(raw,false);
+    discordEditReply(app,token,summary);
+    discordNotify("Timer sync result",summary);
+  } else {
+    Reading r[3]; Change c[3]; bool ready=false; int64_t target=0;
+    raw=previewJson(ready,r,c,target);
+    discordEditReply(app,token,discordResultSummary(raw,true));
+  }
+  discordCommandBusy=false;
+  vTaskDelete(nullptr);
+}
 static void discordHandleMessage(const String &payload) {
   JsonDocument d; if(deserializeJson(d,payload)) return;
   int op=d["op"]| -1;
@@ -482,18 +502,16 @@ static void discordHandleMessage(const String &payload) {
     discordReply(interactionId,token,changed?"Automatic sync stopped. Manual sync remains available.":"Automatic sync is already stopped.");
     discordNotify("Automatic sync stopped","Discord command stopped automatic timer sync."); return;
   }
-  if(sub=="preview") {
-    discordReply(interactionId,token,"Checking all three timers…",true);
-    Reading r[3]; Change c[3]; bool ready=false; int64_t target=0;
-    String raw=previewJson(ready,r,c,target);
-    discordEditReply(app,token,discordResultSummary(raw,true)); return;
-  }
-  if(sub=="run") {
-    discordReply(interactionId,token,"Running safety checks and synchronization…",true);
-    String raw=runSyncJson();
-    String summary=discordResultSummary(raw,false);
-    discordEditReply(app,token,summary);
-    discordNotify("Timer sync result",summary);
+  if(sub=="preview" || sub=="run") {
+    if(discordCommandBusy) { discordReply(interactionId,token,"Another Discord timer operation is already running. Try again shortly."); return; }
+    discordCommandBusy=true;
+    bool doRun=(sub=="run");
+    discordReply(interactionId,token,doRun?"Running safety checks and synchronization…":"Checking all three timers…",true);
+    DiscordTaskArgs *args=new DiscordTaskArgs{interactionId,token,app,doRun};
+    if(xTaskCreatePinnedToCore(discordLongCommandTask,"discordcmd",12288,args,1,nullptr,1)!=pdPASS) {
+      delete args; discordCommandBusy=false;
+      discordEditReply(app,token,"Could not start the Discord command task because device memory is low.");
+    }
     return;
   }
 }
