@@ -170,7 +170,7 @@ static int64_t parseChasterEnd(JsonVariantConst value) {
   if (sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &y,&mo,&d,&h,&mi,&se) < 6) return 0;
   struct tm t={}; t.tm_year=y-1900; t.tm_mon=mo-1; t.tm_mday=d; t.tm_hour=h; t.tm_min=mi; t.tm_sec=se;
   // ISO-8601 timestamps from the provider are normally UTC. Offset suffixes are not interpreted here.
-  time_t stamp = timegm(&t);
+  time_t stamp = mktime(&t);
   // Honor ISO-8601 timezone offsets (e.g. +02:00 or -05:00) rather than treating local time as UTC.
   int tpos=s.indexOf('T');
   int plus=(tpos>=0)?s.indexOf('+',tpos+1):-1;
@@ -286,7 +286,7 @@ static String previewJson(bool &ready, Reading r[3], Change c[3], int64_t &targe
     out+="{\"service\":"+jsonEscape(c[i].service)+",\"beforeSeconds\":"+String((long long)c[i].before);
     out+=",\"before\":"+jsonEscape(durationText(c[i].before))+",\"addSeconds\":"+String((long long)c[i].add);
     out+=",\"add\":"+jsonEscape(durationText(c[i].add))+",\"target\":"+jsonEscape(durationText(target));
-    out+=",\"allowed\":"+(c[i].allowed?"true":"false")+"}";
+    out+=",\"allowed\":"; out+=(c[i].allowed?"true":"false"); out+="}";
   }
   out+="]";
   if(!configured || !readable) out+=",\"message\":\"All three integrations must be configured and readable. No changes will be sent.\"";
@@ -635,6 +635,7 @@ static void setupRoutes() {
 }
 void setup() {
   Serial.begin(115200); delay(250);
+  setenv("TZ","UTC0",1); tzset();
   if(String(DASHBOARD_PASSWORD).length()<16) { Serial.println("FATAL: Set a unique dashboard password of at least 16 characters in secrets.h."); while(true) delay(1000); }
   loadSaved();
   WiFi.mode(WIFI_STA);
