@@ -113,7 +113,19 @@ static int64_t parseChasterEnd(JsonVariantConst value) {
   if (sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &y,&mo,&d,&h,&mi,&se) < 6) return 0;
   struct tm t={}; t.tm_year=y-1900; t.tm_mon=mo-1; t.tm_mday=d; t.tm_hour=h; t.tm_min=mi; t.tm_sec=se;
   // ISO-8601 timestamps from the provider are normally UTC. Offset suffixes are not interpreted here.
-  time_t stamp = timegm(&t); return stamp > 0 ? (int64_t)stamp : 0;
+  time_t stamp = timegm(&t);
+  // Honor ISO-8601 timezone offsets (e.g. +02:00 or -05:00) rather than treating local time as UTC.
+  int tpos=s.indexOf('T');
+  int plus=(tpos>=0)?s.indexOf('+',tpos+1):-1;
+  int minus=(tpos>=0)?s.indexOf('-',tpos+1):-1;
+  int pos=(plus>=0)?plus:minus;
+  if(pos>=0 && pos+5<s.length()) {
+    int oh=s.substring(pos+1,pos+3).toInt();
+    int om=s.substring(pos+4,pos+6).toInt();
+    int offset=oh*3600+om*60;
+    if(s[pos]=='+') stamp-=offset; else stamp+=offset;
+  }
+  return stamp > 0 ? (int64_t)stamp : 0;
 }
 static int64_t readChaster() {
   if (!chasterCfg.enabled || !chasterCfg.token.length() || !chasterCfg.timerId.length()) throw String("Chaster is not configured.");
