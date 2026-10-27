@@ -13,6 +13,7 @@
 static WebServer server(80);
 static Preferences prefs;
 static bool syncBusy = false;
+static portMUX_TYPE syncMux = portMUX_INITIALIZER_UNLOCKED;
 static bool autoSync = false;
 static uint64_t lastAutoSlot = 0;
 static const int DEFAULT_MAX_ADDITION_SECONDS = 2592000;
@@ -29,7 +30,8 @@ static String lastStatus = "Ready";
 static String discordBotToken, discordApplicationId, discordGuildId, discordWebhookUrl, discordLogChannelId;
 static uint32_t lastDiscordHealthAt = 0;
 static WebSocketsClient discordWs;
-static bool discordEnabled = false, discordIdentified = false, discordCommandBusy = false;
+static bool discordEnabled = false, discordIdentified = false;
+static volatile bool discordCommandBusy = false;
 static uint32_t discordHeartbeatMs = 0, discordLastHeartbeat = 0;
 static int64_t discordSequence = -1;
 // DigiCert Global Root G2. TLS is verified; the client never falls back to insecure mode.
@@ -293,8 +295,11 @@ static String previewJson(bool &ready, Reading r[3], Change c[3], int64_t &targe
   return out;
 }
 static String runSyncJson() {
-  if(syncBusy) return "{\"ok\":false,\"message\":\"A synchronization is already in progress.\"}";
-  syncBusy=true;
+  portENTER_CRITICAL(&syncMux);
+  bool alreadyBusy=syncBusy;
+  if(!alreadyBusy) syncBusy=true;
+  portEXIT_CRITICAL(&syncMux);
+  if(alreadyBusy) return "{\"ok\":false,\"message\":\"A synchronization is already in progress.\"}";
   String result;
   Reading r[3]; Change c[3]; bool ready=false; int64_t target=0;
   try {
@@ -336,7 +341,7 @@ static String runSyncJson() {
     }
   } catch(String e) { result="{\"ok\":false,\"message\":"+jsonEscape(e)+"}"; }
     catch(...) { result="{\"ok\":false,\"message\":\"Unexpected synchronization error.\"}"; }
-  syncBusy=false;
+  portENTER_CRITICAL(&syncMux); syncBusy=false; portEXIT_CRITICAL(&syncMux);
   lastStatus=result;
   return result;
 }
@@ -487,6 +492,7 @@ static void discordHandleMessage(const String &payload) {
   String interactionId=x["id"]|"", token=x["token"]|"", app=x["application_id"]|"";
   String sub=x["data"]["options"][0]["name"]|"";
   if(!interactionId.length()||!token.length()) return;
+  if(sub=="status" && discordCommandBusy) { discordReply(interactionId,token,"A timer operation is running; check status again shortly."); return; }
   if(sub=="status") {
     String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\nInterval: 10 minutes\nLast status: "+discordResultSummary(lastStatus,false);
     discordReply(interactionId,token,msg); return;
