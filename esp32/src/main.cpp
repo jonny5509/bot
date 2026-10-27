@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <WebSocketsClient.h>
 #include "secrets.h"
 
 // ESP32-WROOM-32 port of jonny5509/bot. Writes are deliberately never retried.
@@ -14,7 +15,7 @@ static Preferences prefs;
 static bool syncBusy = false;
 static bool autoSync = false;
 static uint64_t lastAutoSlot = 0;
-static static const int DEFAULT_MAX_ADDITION_SECONDS = 2592000;
+static const int DEFAULT_MAX_ADDITION_SECONDS = 2592000;
 
 struct Integration {
   bool enabled = false;
@@ -25,6 +26,34 @@ struct Integration {
 static Integration chasterCfg, chastifyCfg, emlaCfg;
 static int maxAdditionSeconds = DEFAULT_MAX_ADDITION_SECONDS;
 static String lastStatus = "Ready";
+static String discordBotToken, discordApplicationId, discordGuildId, discordWebhookUrl;
+static WebSocketsClient discordWs;
+static bool discordEnabled = false, discordIdentified = false;
+static uint32_t discordHeartbeatMs = 0, discordLastHeartbeat = 0;
+static int64_t discordSequence = -1;
+// DigiCert Global Root G2. TLS is verified; the client never falls back to insecure mode.
+static const char DISCORD_ROOT_CA[] PROGMEM = R"PEM(-----BEGIN CERTIFICATE-----
+MIIDjjCCAnagAwIBAgIQAzrx5qcRqaC7KGSxHQn65TANBgkqhkiG9w0BAQsFADBh
+MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3
+d3cuZGlnaWNlcnQuY29tMSAwHgYDVQQDExdEaWdpQ2VydCBHbG9iYWwgUm9vdCBH
+MjAeFw0xMzA4MDExMjAwMDBaFw0zODAxMTUxMjAwMDBaMGExCzAJBgNVBAYTAlVT
+MRUwEwYDVQQKEwxEaWdpQ2VydCBJbmMxGTAXBgNVBAsTEHd3dy5kaWdpY2VydC5j
+b20xIDAeBgNVBAMTF0RpZ2lDZXJ0IEdsb2JhbCBSb290IEcyMIIBIjANBgkqhkiG
+9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuzfNNNx7a8myaJCtSnX/RrohCgiN9RlUyfuI
+2/Ou8jqJkTx65qsGGmvPrC3oXgkkRLpimn7Wo6h+4FR1IAWsULecYxpsMNzaHxmx
+1x7e/dfgy5SDN67sH0NO3Xss0r0upS/kqbitOtSZpLYl6ZtrAGCSYP9PIUkY92eQ
+q2EGnI/yuum06ZIya7XzV+hdG82MHauVBJVJ8zUtluNJbd134/tJS7SsVQepj5Wz
+tCO7TG1F8PapspUwtP1MVYwnSlcUfIKdzXOS0zZKBgyMUNGPHgm+F6HmIcr9g+UQ
+vIOlCsRnKPZzFBQ9RnbDhxSJITRNrw9FDKZJobq7nMWxM4MphQIDAQABo0IwQDAP
+BgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBhjAdBgNVHQ4EFgQUTiJUIBiV
+5uNu5g/6+rkS7QYXjzkwDQYJKoZIhvcNAQELBQADggEBAGBnKJRvDkhj6zHd6mcY
+1Yl9PMWLSn/pvtsrF9+wX3N3KjITOYFnQoQj8kVnNeyIv/iPsGEMNKSuIEyExtv4
+NeF22d+mQrvHRAiGfzZ0JFrabA0UWTW98kndth/Jsw1HKj2ZL7tcu7XUIOGZX1NG
+Fdtom/DzMNU+MeKNhJ7jitralj41E6Vf8PlwUHBHQRFXGU7Aj64GxJUTFy8bJZ91
+8rGOmaFvE7FBcf6IKshPECBV1/MUReXgRPTqh5Uykw7+U0b6LJ3/iyK5S9kJRaTe
+pLiaWN0bfVKfjllDiIGknibVb63dDcY3fe0Dkhvld1927jyNxF1WW6LZZm6zNTfl
+MrY=
+-----END CERTIFICATE-----)PEM";
 
 struct Reading {
   String service;
@@ -298,6 +327,7 @@ static const char INDEX_HTML[] PROGMEM = R"HTML(
 <section><h2>Settings</h2><p class="muted">Blank API key fields preserve stored keys. Keys are never sent back to the browser. Protect this dashboard with its Basic Auth password and keep it on a trusted LAN.</p>
 <form id="settings"><div class="grid">
 <div class="svc"><h3>Wi-Fi / device</h3><p class="muted">Wi-Fi credentials are set in secrets.h before flashing.</p><label>Maximum addition (seconds)</label><input id="max" type="number" min="1" max="2592000" required></div>
+<div class="svc"><h3>Discord bot</h3><p class="muted">Optional. Create a bot in the Discord Developer Portal, enable it in your server, and keep its token private.</p><label>Bot token</label><input id="discordToken" type="password" autocomplete="new-password"><label>Application ID</label><input id="discordAppId" autocomplete="off"><label>Guild ID (recommended for instant command updates)</label><input id="discordGuildId" autocomplete="off"><label>Incoming webhook URL (optional notifications)</label><input id="discordWebhook" type="password" autocomplete="new-password"><small>Blank secret fields preserve saved values. Discord commands: /timesync status, start, stop, preview, run.</small></div>
 <div class="svc"><h3>Chaster</h3><label><input id="chasterEnabled" type="checkbox" style="width:auto"> Enabled</label><label>Bearer token</label><input id="chasterToken" type="password" autocomplete="new-password"><label>Lock ID</label><input id="chasterId" autocomplete="off"></div>
 <div class="svc"><h3>Chastify</h3><label><input id="chastifyEnabled" type="checkbox" style="width:auto"> Enabled</label><label>Developer API key</label><input id="chastifyToken" type="password" autocomplete="new-password"><label>Lock._id (24 hex chars)</label><input id="chastifyId" autocomplete="off" maxlength="24"></div>
 <div class="svc"><h3>EmlaLock</h3><label><input id="emlaEnabled" type="checkbox" style="width:auto"> Enabled</label><label>API key</label><input id="emlaToken" type="password" autocomplete="new-password"><label>User ID</label><input id="emlaId" autocomplete="off"></div>
@@ -310,17 +340,153 @@ async function preview(){ $('preview').disabled=true;try{show(await api('/api/pr
 $('preview').onclick=preview;
 $('sync').onclick=async()=>{if(!confirm('Send time-change requests to all three providers? Review the preview first.'))return;$('sync').disabled=true;try{show(await api('/api/sync','POST',{}))}catch(e){$('msg').textContent=e.message}finally{$('sync').disabled=false}};
 $('auto').onchange=async()=>{try{await api('/api/auto','POST',{enabled:$('auto').checked})}catch(e){$('msg').textContent=e.message;$('auto').checked=false}};
-$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n==='emla'?'emlalock':n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
-async function loadSettings(){try{const d=await api('/api/settings');$('max').value=d.maxAdditionSeconds;for(const n of ['chaster','chastify','emlalock']){const p=n==='emlalock'?'emla':n;$(p+'Enabled').checked=d.integrations[n].enabled;$(p+'Id').value=n==='emlalock'?d.integrations[n].userId:d.integrations[n].timerId}}catch(e){$('msg').textContent=e.message}}
+$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),discordBotToken:$('discordToken').value,discordApplicationId:$('discordAppId').value,discordGuildId:$('discordGuildId').value,discordWebhookUrl:$('discordWebhook').value,integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n==='emla'?'emlalock':n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken','discordToken','discordWebhook'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
+async function loadSettings(){try{const d=await api('/api/settings');$('max').value=d.maxAdditionSeconds;$('discordAppId').value=d.discordApplicationId||'';$('discordGuildId').value=d.discordGuildId||'';for(const n of ['chaster','chastify','emlalock']){const p=n==='emlalock'?'emla':n;$(p+'Enabled').checked=d.integrations[n].enabled;$(p+'Id').value=n==='emlalock'?d.integrations[n].userId:d.integrations[n].timerId}}catch(e){$('msg').textContent=e.message}}
 loadSettings();preview();setInterval(async()=>{try{const d=await api('/api/auto');$('auto').checked=d.enabled}catch{}},15000);
 </script></body></html>
 )HTML";
+
+
+static bool discordHttp(const String &method, const String &path, const String &body, String &response) {
+  if(!discordBotToken.length()) return false;
+  WiFiClientSecure tls; tls.useBuiltinCACertBundle();
+  HTTPClient http; http.setConnectTimeout(8000); http.setTimeout(10000);
+  if(!http.begin(tls,"https://discord.com/api/v10"+path)) return false;
+  http.addHeader("Authorization","Bot "+discordBotToken);
+  http.addHeader("Content-Type","application/json");
+  http.addHeader("User-Agent","ESP32-TimerSync (https://github.com/jonny5509/bot, 1.0)");
+  int code=http.sendRequest(method.c_str(),body);
+  response=code>0?http.getString():"";
+  http.end();
+  return code>=200 && code<300;
+}
+static bool discordWebhook(const String &title,const String &message) {
+  if(!discordWebhookUrl.length()) return false;
+  if(!discordWebhookUrl.startsWith("https://discord.com/api/webhooks/") &&
+     !discordWebhookUrl.startsWith("https://discordapp.com/api/webhooks/")) return false;
+  JsonDocument d; d["content"]="**"+title+"**\\n"+message;
+  String body; serializeJson(d,body);
+  WiFiClientSecure tls; tls.useBuiltinCACertBundle();
+  HTTPClient http; http.setConnectTimeout(6000); http.setTimeout(8000);
+  if(!http.begin(tls,discordWebhookUrl)) return false;
+  http.addHeader("Content-Type","application/json");
+  int code=http.POST(body); http.end();
+  return code>=200&&code<300;
+}
+static void discordReply(const String &id,const String &token,const String &content,bool deferred=false) {
+  JsonDocument d; d["type"]=deferred?5:4;
+  if(!deferred) { d["data"]["content"]=content.substring(0,1900); d["data"]["flags"]=64; }
+  else { d["data"]["flags"]=64; }
+  String body; serializeJson(d,body); String response;
+  discordHttp("POST","/interactions/"+id+"/"+token+"/callback",body,response);
+}
+static void discordEditReply(const String &app,const String &token,const String &content) {
+  JsonDocument d; d["content"]=content.substring(0,1900);
+  String body; serializeJson(d,body); String response;
+  discordHttp("PATCH","/webhooks/"+app+"/"+token+"/messages/@original",body,response);
+}
+static String discordResultSummary(const String &raw,bool preview) {
+  JsonDocument d; if(deserializeJson(d,raw)) return "Could not parse timer response.";
+  String out=String((const char*)(d["message"]|"Timer operation completed."));
+  if(d["target"].is<const char*>()) out+="\\nTarget: "+String((const char*)d["target"]);
+  JsonArray changes=d["changes"].as<JsonArray>();
+  for(JsonObject x:changes) {
+    String line="\\n"+String((const char*)(x["service"]|"timer"))+": ";
+    line+=String((const char*)(x["status"]|(preview?"preview":"unknown")));
+    if(x["add"].is<const char*>()) line+=" (add "+String((const char*)x["add"])+")";
+    if(x["error"].is<const char*>()) line+=" — "+String((const char*)x["error"]);
+    out+=line;
+  }
+  return out;
+}
+static void discordRegisterCommands() {
+  if(!discordApplicationId.length()||!discordBotToken.length()) return;
+  String route="/applications/"+discordApplicationId;
+  if(discordGuildId.length()) route+="/guilds/"+discordGuildId;
+  route+="/commands";
+  String body=R"JSON([{"name":"timesync","description":"Control the ESP32 timer synchronization","options":[{"type":1,"name":"status","description":"Show automatic sync status"},{"type":1,"name":"start","description":"Start checks every 10 minutes"},{"type":1,"name":"stop","description":"Stop automatic checks"},{"type":1,"name":"preview","description":"Preview timer differences without changes"},{"type":1,"name":"run","description":"Run a manual sync now"}]}])JSON";
+  String response;
+  if(discordHttp("PUT",route,body,response)) Serial.println("Discord slash commands registered.");
+  else Serial.println("Discord command registration failed; check bot token, application ID, and bot scope.");
+}
+static void discordHandleMessage(const String &payload) {
+  JsonDocument d; if(deserializeJson(d,payload)) return;
+  int op=d["op"]| -1;
+  if(d["s"].is<int>()) discordSequence=d["s"].as<int>();
+  if(op==10) {
+    discordHeartbeatMs=d["d"]["heartbeat_interval"]|45000;
+    JsonDocument identify; identify["op"]=2;
+    identify["d"]["token"]=discordBotToken;
+    identify["d"]["intents"]=1;
+    identify["d"]["properties"]["os"]="esp32";
+    identify["d"]["properties"]["browser"]="timer-sync";
+    identify["d"]["properties"]["device"]="esp32";
+    String out; serializeJson(identify,out); discordWs.sendTXT(out);
+    discordLastHeartbeat=millis(); discordIdentified=true; return;
+  }
+  if(op==1) {
+    JsonDocument hb; hb["op"]=1; if(discordSequence>=0) hb["d"]=discordSequence; else hb["d"]=nullptr;
+    String out; serializeJson(hb,out); discordWs.sendTXT(out); discordLastHeartbeat=millis(); return;
+  }
+  if(op==7 || op==9) { discordIdentified=false; discordWs.disconnect(); return; }
+  if(op!=0 || String((const char*)(d["t"]|""))!="INTERACTION_CREATE") return;
+  JsonObject x=d["d"];
+  if(String((const char*)(x["type"]|""))=="") { /* interaction type is numeric; handled below */ }
+  if((x["type"]|0)!=2 || String((const char*)(x["data"]["name"]|""))!="timesync") return;
+  String interactionId=x["id"]|"", token=x["token"]|"", app=x["application_id"]|"";
+  String sub=x["data"]["options"][0]["name"]|"";
+  if(!interactionId.length()||!token.length()) return;
+  if(sub=="status") {
+    String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\\nInterval: 10 minutes\\nLast status: "+lastStatus;
+    discordReply(interactionId,token,msg); return;
+  }
+  if(sub=="start") {
+    bool changed=!autoSync; autoSync=true; time_t now=time(nullptr);
+    lastAutoSlot=(now>1700000000)?(uint64_t)now/600:0;
+    discordReply(interactionId,token,changed?"Automatic sync enabled. Checks run on 10-minute clock boundaries.":"Automatic sync is already running.");
+    discordWebhook("Automatic sync started","Discord command enabled automatic timer sync."); return;
+  }
+  if(sub=="stop") {
+    bool changed=autoSync; autoSync=false;
+    discordReply(interactionId,token,changed?"Automatic sync stopped. Manual sync remains available.":"Automatic sync is already stopped.");
+    discordWebhook("Automatic sync stopped","Discord command stopped automatic timer sync."); return;
+  }
+  if(sub=="preview") {
+    discordReply(interactionId,token,"Checking all three timers…",true);
+    Reading r[3]; Change c[3]; bool ready=false; int64_t target=0;
+    String raw=previewJson(ready,r,c,target);
+    discordEditReply(app,token,discordResultSummary(raw,true)); return;
+  }
+  if(sub=="run") {
+    discordReply(interactionId,token,"Running safety checks and synchronization…",true);
+    String raw=runSyncJson();
+    String summary=discordResultSummary(raw,false);
+    discordEditReply(app,token,summary);
+    discordWebhook("Timer sync result",summary);
+    return;
+  }
+}
+static void discordEvent(WStype_t type,uint8_t *payload,size_t length) {
+  if(type==WStype_CONNECTED) { Serial.println("Discord gateway connected."); discordIdentified=false; }
+  else if(type==WStype_DISCONNECTED) { Serial.println("Discord gateway disconnected; reconnecting."); discordIdentified=false; }
+  else if(type==WStype_TEXT) discordHandleMessage(String((const char*)payload).substring(0,length));
+}
+static void discordStart() {
+  if(!discordBotToken.length()||!discordApplicationId.length()) {
+    Serial.println("Discord bot not configured; web dashboard remains available."); return;
+  }
+  discordRegisterCommands();
+  discordWs.onEvent(discordEvent);
+  discordWs.setReconnectInterval(5000);
+  discordWs.beginSslWithCA("gateway.discord.gg",443,"/?v=10&encoding=json",DISCORD_ROOT_CA);
+  discordEnabled=true;
+}
 
 static void sendJson(int code, const String &body) { server.send(code,"application/json; charset=utf-8",body); }
 static void handleRoot() { if(!authorized()) return; server.send_P(200,"text/html; charset=utf-8",INDEX_HTML); }
 static void handleGetSettings() {
   if(!authorized()) return;
-  String out="{\"maxAdditionSeconds\":"+String(maxAdditionSeconds)+",\"integrations\":{";
+  String out="{\"maxAdditionSeconds\":"+String(maxAdditionSeconds)+",\"discordApplicationId\":"+jsonEscape(discordApplicationId)+",\"discordGuildId\":"+jsonEscape(discordGuildId)+",\"discordTokenConfigured\":"+(discordBotToken.length()?"true":"false")+",\"discordWebhookConfigured\":"+(discordWebhookUrl.length()?"true":"false")+",\"integrations\":{";
   out+="\"chaster\":{\"enabled\":"+(chasterCfg.enabled?String("true"):String("false"))+",\"timerId\":"+jsonEscape(chasterCfg.timerId)+"},";
   out+="\"chastify\":{\"enabled\":"+(chastifyCfg.enabled?String("true"):String("false"))+",\"timerId\":"+jsonEscape(chastifyCfg.timerId)+"},";
   out+="\"emlalock\":{\"enabled\":"+(emlaCfg.enabled?String("true"):String("false"))+",\"userId\":"+jsonEscape(emlaCfg.userId)+"}}}";
@@ -344,7 +510,17 @@ static void handleSaveSettings() {
   };
   maxAdditionSeconds=limit;
   update("chaster",chasterCfg); update("chastify",chastifyCfg); update("emlalock",emlaCfg);
+  String incomingBot=d["discordBotToken"]|"";
+  if(incomingBot.length()) discordBotToken=incomingBot;
+  String incomingWebhook=d["discordWebhookUrl"]|"";
+  if(incomingWebhook.length()) discordWebhookUrl=incomingWebhook;
+  if(d["discordApplicationId"].is<const char*>()) discordApplicationId=String((const char*)d["discordApplicationId"]);
+  if(d["discordGuildId"].is<const char*>()) discordGuildId=String((const char*)d["discordGuildId"]);
   prefs.putInt("maxAdd",maxAdditionSeconds);
+  prefs.putString("discordToken",discordBotToken);
+  prefs.putString("discordApp",discordApplicationId);
+  prefs.putString("discordGuild",discordGuildId);
+  prefs.putString("discordWebhook",discordWebhookUrl);
   auto save=[&](const char* key, const Integration &cfg) {
     String p=String(key)+"_";
     prefs.putBool((p+"on").c_str(),cfg.enabled);
@@ -353,7 +529,7 @@ static void handleSaveSettings() {
     prefs.putString((p+"user").c_str(),cfg.userId);
   };
   save("chaster",chasterCfg); save("chastify",chastifyCfg); save("emla",emlaCfg);
-  sendJson(200,"{\"ok\":true,\"message\":\"Settings saved to ESP32 non-volatile storage.\"}");
+  sendJson(200,"{\"ok\":true,\"message\":\"Settings saved. Reboot the ESP32 to reconnect Discord with updated bot credentials.\"}");
 }
 static void handlePreview() {
   if(!authorized()) return;
@@ -383,6 +559,10 @@ static void loadSaved() {
     cfg.userId=prefs.getString((p+"user").c_str(),"");
   };
   load("chaster",chasterCfg); load("chastify",chastifyCfg); load("emla",emlaCfg);
+  discordBotToken=prefs.getString("discordToken","");
+  discordApplicationId=prefs.getString("discordApp","");
+  discordGuildId=prefs.getString("discordGuild","");
+  discordWebhookUrl=prefs.getString("discordWebhook","");
 }
 static void setupRoutes() {
   server.on("/",HTTP_GET,handleRoot);
@@ -412,9 +592,17 @@ void setup() {
   Serial.printf("\nDashboard: http://%s/\n",WiFi.localIP().toString().c_str());
   Serial.println("Use the dashboard credentials from secrets.h. Keep the device on a trusted LAN.");
   setupRoutes(); server.begin();
+  discordStart();
 }
 void loop() {
   server.handleClient();
+  if(discordEnabled && WiFi.status()==WL_CONNECTED) {
+    discordWs.loop();
+    if(discordIdentified && discordHeartbeatMs && millis()-discordLastHeartbeat>=discordHeartbeatMs) {
+      JsonDocument hb; hb["op"]=1; if(discordSequence>=0) hb["d"]=discordSequence; else hb["d"]=nullptr;
+      String out; serializeJson(hb,out); discordWs.sendTXT(out); discordLastHeartbeat=millis();
+    }
+  }
   if(autoSync && !syncBusy && WiFi.status()==WL_CONNECTED) {
     time_t now=time(nullptr);
     if(now>1700000000) {
@@ -422,7 +610,7 @@ void loop() {
       if(slot>lastAutoSlot) {
         lastAutoSlot=slot; // wall-clock :00, :10, :20 ... boundaries; missed slots are skipped.
         Serial.println("Automatic timer synchronization starting.");
-        String result=runSyncJson(); Serial.println(result);
+        String result=runSyncJson(); Serial.println(result); discordWebhook("Automatic timer sync result",discordResultSummary(result,false));
       }
     }
   }
