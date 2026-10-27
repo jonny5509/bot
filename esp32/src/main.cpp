@@ -386,7 +386,7 @@ static bool discordWebhook(const String &title,const String &message) {
   if(!discordWebhookUrl.length()) return false;
   if(!discordWebhookUrl.startsWith("https://discord.com/api/webhooks/") &&
      !discordWebhookUrl.startsWith("https://discordapp.com/api/webhooks/")) return false;
-  JsonDocument d; d["content"]="**"+title+"**\\n"+message;
+  JsonDocument d; d["content"]="**"+title+"**\n"+message;
   String body; serializeJson(d,body);
   WiFiClientSecure tls; tls.useBuiltinCACertBundle();
   HTTPClient http; http.setConnectTimeout(6000); http.setTimeout(8000);
@@ -410,10 +410,10 @@ static void discordEditReply(const String &app,const String &token,const String 
 static String discordResultSummary(const String &raw,bool preview) {
   JsonDocument d; if(deserializeJson(d,raw)) return "Could not parse timer response.";
   String out=String((const char*)(d["message"]|"Timer operation completed."));
-  if(d["target"].is<const char*>()) out+="\\nTarget: "+String((const char*)d["target"]);
+  if(d["target"].is<const char*>()) out+="\nTarget: "+String((const char*)d["target"]);
   JsonArray changes=d["changes"].as<JsonArray>();
   for(JsonObject x:changes) {
-    String line="\\n"+String((const char*)(x["service"]|"timer"))+": ";
+    String line="\n"+String((const char*)(x["service"]|"timer"))+": ";
     line+=String((const char*)(x["status"]|(preview?"preview":"unknown")));
     if(x["add"].is<const char*>()) line+=" (add "+String((const char*)x["add"])+")";
     if(x["error"].is<const char*>()) line+=" — "+String((const char*)x["error"]);
@@ -454,11 +454,12 @@ static void discordHandleMessage(const String &payload) {
   if(op!=0 || String((const char*)(d["t"]|""))!="INTERACTION_CREATE") return;
   JsonObject x=d["d"];
   if((x["type"]|0)!=2 || String((const char*)(x["data"]["name"]|""))!="timesync") return;
+  if(discordGuildId.length() && String((const char*)(x["guild_id"]|""))!=discordGuildId) return;
   String interactionId=x["id"]|"", token=x["token"]|"", app=x["application_id"]|"";
   String sub=x["data"]["options"][0]["name"]|"";
   if(!interactionId.length()||!token.length()) return;
   if(sub=="status") {
-    String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\\nInterval: 10 minutes\\nLast status: "+lastStatus;
+    String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\nInterval: 10 minutes\nLast status: "+lastStatus;
     discordReply(interactionId,token,msg); return;
   }
   if(sub=="start") {
