@@ -14,9 +14,8 @@ static WebServer server(80);
 static Preferences prefs;
 static bool syncBusy = false;
 static bool autoSync = false;
-static uint32_t lastAutoCheck = 0;
-static const uint32_t AUTO_INTERVAL_MS = 600000UL;
-static const int DEFAULT_MAX_ADDITION_SECONDS = 2592000;
+static uint64_t lastAutoSlot = 0;
+static static const int DEFAULT_MAX_ADDITION_SECONDS = 2592000;
 
 struct Integration {
   bool enabled = false;
@@ -294,7 +293,7 @@ async function preview(){ $('preview').disabled=true;try{show(await api('/api/pr
 $('preview').onclick=preview;
 $('sync').onclick=async()=>{if(!confirm('Send time-change requests to all three providers? Review the preview first.'))return;$('sync').disabled=true;try{show(await api('/api/sync','POST',{}))}catch(e){$('msg').textContent=e.message}finally{$('sync').disabled=false}};
 $('auto').onchange=async()=>{try{await api('/api/auto','POST',{enabled:$('auto').checked})}catch(e){$('msg').textContent=e.message;$('auto').checked=false}};
-$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
+$('settings').onsubmit=async e=>{e.preventDefault();const data={maxAdditionSeconds:Number($('max').value),integrations:{}};for(const n of ['chaster','chastify','emla']){const prefix=n==='emla'?'emla':n;data.integrations[n==='emla'?'emlalock':n]={enabled:$(prefix+'Enabled').checked,apiToken:$(prefix+'Token').value,timerId:n==='emla'?'':$(prefix+'Id').value,userId:n==='emla'?$(prefix+'Id').value:''}}try{const d=await api('/api/settings','POST',data);$('msg').textContent=d.message;['chasterToken','chastifyToken','emlaToken'].forEach(id=>$(id).value='')}catch(err){$('msg').textContent=err.message}};
 async function loadSettings(){try{const d=await api('/api/settings');$('max').value=d.maxAdditionSeconds;for(const n of ['chaster','chastify','emlalock']){const p=n==='emlalock'?'emla':n;$(p+'Enabled').checked=d.integrations[n].enabled;$(p+'Id').value=n==='emlalock'?d.integrations[n].userId:d.integrations[n].timerId}}catch(e){$('msg').textContent=e.message}}
 loadSettings();preview();setInterval(async()=>{try{const d=await api('/api/auto');$('auto').checked=d.enabled}catch{}},15000);
 </script></body></html>
@@ -353,7 +352,7 @@ static void handleAutoGet() { if(!authorized()) return; sendJson(200,String("{\"
 static void handleAutoSet() {
   if(!authorized()) return;
   JsonDocument d; if(deserializeJson(d,server.arg("plain"))) { sendJson(400,"{\"message\":\"Invalid JSON.\"}"); return; }
-  autoSync=d["enabled"]|false; lastAutoCheck=millis();
+  autoSync=d["enabled"]|false; time_t now=time(nullptr); if(now>1700000000) lastAutoSlot=(uint64_t)now/600; else lastAutoSlot=0;
   sendJson(200,String("{\"ok\":true,\"enabled\":")+(autoSync?"true":"false")+"}");
 }
 static void loadSaved() {
@@ -399,11 +398,16 @@ void setup() {
 }
 void loop() {
   server.handleClient();
-  if(autoSync && !syncBusy && WiFi.status()==WL_CONNECTED && millis()-lastAutoCheck>=AUTO_INTERVAL_MS) {
-    lastAutoCheck=millis();
-    // Skip if the system clock is not synchronized; TLS validation also depends on correct time.
-    if(time(nullptr)>1700000000) { Serial.println("Automatic timer comparison starting."); String result=runSyncJson(); Serial.println(result); }
-    else Serial.println("Automatic sync skipped: clock is not synchronized.");
+  if(autoSync && !syncBusy && WiFi.status()==WL_CONNECTED) {
+    time_t now=time(nullptr);
+    if(now>1700000000) {
+      uint64_t slot=(uint64_t)now/600;
+      if(slot>lastAutoSlot) {
+        lastAutoSlot=slot; // wall-clock :00, :10, :20 ... boundaries; missed slots are skipped.
+        Serial.println("Automatic timer synchronization starting.");
+        String result=runSyncJson(); Serial.println(result);
+      }
+    }
   }
   delay(2);
 }
