@@ -426,7 +426,7 @@ static void discordRegisterCommands() {
   String route="/applications/"+discordApplicationId;
   if(discordGuildId.length()) route+="/guilds/"+discordGuildId;
   route+="/commands";
-  String body=R"JSON([{"name":"timesync","description":"Control the ESP32 timer synchronization","options":[{"type":1,"name":"status","description":"Show automatic sync status"},{"type":1,"name":"start","description":"Start checks every 10 minutes"},{"type":1,"name":"stop","description":"Stop automatic checks"},{"type":1,"name":"preview","description":"Preview timer differences without changes"},{"type":1,"name":"run","description":"Run a manual sync now"}]}])JSON";
+  String body=R"JSON([{"name":"timesync","description":"Control the ESP32 timer synchronization","default_member_permissions":"8","dm_permission":false,"options":[{"type":1,"name":"status","description":"Show automatic sync status"},{"type":1,"name":"start","description":"Start checks every 10 minutes"},{"type":1,"name":"stop","description":"Stop automatic checks"},{"type":1,"name":"preview","description":"Preview timer differences without changes"},{"type":1,"name":"run","description":"Run a manual sync now"}]}])JSON";
   String response;
   if(discordHttp("PUT",route,body,response)) Serial.println("Discord slash commands registered.");
   else Serial.println("Discord command registration failed; check bot token, application ID, and bot scope.");
@@ -459,7 +459,7 @@ static void discordHandleMessage(const String &payload) {
   String sub=x["data"]["options"][0]["name"]|"";
   if(!interactionId.length()||!token.length()) return;
   if(sub=="status") {
-    String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\nInterval: 10 minutes\nLast status: "+lastStatus;
+    String msg="Automatic sync: "+String(autoSync?"RUNNING":"STOPPED")+"\nInterval: 10 minutes\nLast status: "+discordResultSummary(lastStatus,false);
     discordReply(interactionId,token,msg); return;
   }
   if(sub=="start") {
@@ -489,7 +489,7 @@ static void discordHandleMessage(const String &payload) {
   }
 }
 static void discordEvent(WStype_t type,uint8_t *payload,size_t length) {
-  if(type==WStype_CONNECTED) { Serial.println("Discord gateway connected."); discordIdentified=false; }
+  if(type==WStype_CONNECTED) { Serial.println("Discord gateway connected."); discordIdentified=false; discordSequence=-1; discordHeartbeatMs=0; }
   else if(type==WStype_DISCONNECTED) { Serial.println("Discord gateway disconnected; reconnecting."); discordIdentified=false; }
   else if(type==WStype_TEXT) discordHandleMessage(String((const char*)payload).substring(0,length));
 }
