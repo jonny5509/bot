@@ -93,7 +93,11 @@ static String requestApi(const String &service, const String &url, const String 
   }
   JsonDocument parsed;
   DeserializationError err = deserializeJson(parsed, response);
-  if (err) throw String(service + " returned invalid JSON.");
+  if (err) {
+    // Some write endpoints can succeed with an empty or non-JSON response; do not mislabel that as a failed write.
+    if (method == "POST" || url.indexOf("/add?") >= 0) return response;
+    throw String(service + " returned invalid JSON.");
+  }
   if (!parsed["error"].isNull() && parsed["error"].as<String>().length()) {
     String msg = parsed["message"] | parsed["error"].as<String>();
     if (msg.length() > 180) msg = msg.substring(0,180);
