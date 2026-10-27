@@ -28,6 +28,10 @@ Mocked adapter tests are included. After installing dependencies, run `npm test`
 - The schedule continues 24/7 only while the app process is running and the computer is awake and connected. It does not run while the computer is shut down or asleep.
 - Stopping automatic mode cancels the next scheduled check. Manual checks remain available.
 
+## ESP32 standalone port
+
+A native Arduino/PlatformIO firmware port for the ESP32-WROOM-32 with an ESP32-hosted dashboard is available in [`esp32/`](esp32/README.md). It preserves the all-three-provider preflight, longest-timer target, addition cap, and no-automatic-retry behavior. See the port README for build steps and security limitations; this firmware has not yet been validated with real provider credentials or physical hardware.
+
 ## Windows quick start
 
 1. Double-click `Start Time Sync.bat`.
