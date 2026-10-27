@@ -131,7 +131,9 @@ static int64_t readChaster() {
   if (!chasterCfg.enabled || !chasterCfg.token.length() || !chasterCfg.timerId.length()) throw String("Chaster is not configured.");
   String raw=requestApi("Chaster","https://api.chaster.app/locks/"+encodeURIComponent(chasterCfg.timerId),"GET",chasterCfg.token,"","","","");
   JsonDocument d; deserializeJson(d,raw);
-  JsonVariantConst lock=d["lock"].is<JsonObjectConst>()?d["lock"]:d["data"].is<JsonObjectConst>()?d["data"]:d.as<JsonVariantConst>();
+  JsonVariantConst lock=d.as<JsonVariantConst>();
+  if(d["lock"].is<JsonObjectConst>()) lock=d["lock"].as<JsonVariantConst>();
+  else if(d["data"].is<JsonObjectConst>()) lock=d["data"].as<JsonVariantConst>();
   int64_t end=0;
   for (const char* key : {"endDate","endDateTime"}) { end=parseChasterEnd(lock[key]); if(end) break; }
   if(!end && lock["timer"].is<JsonObjectConst>()) end=parseChasterEnd(lock["timer"]["endDate"]);
