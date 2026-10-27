@@ -6,7 +6,6 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <time.h>
-#include <esp_crt_bundle.h>
 #include "secrets.h"
 
 // ESP32-WROOM-32 port of jonny5509/bot. Writes are deliberately never retried.
@@ -73,7 +72,7 @@ static String requestApi(const String &service, const String &url, const String 
                          const String &token, const String &lockId, const String &body,
                          const String &emlaUser = "", const String &emlaKey = "") {
   WiFiClientSecure tls;
-  tls.setCACertBundle(x509_crt_bundle_start); // Validate server certificates; never use setInsecure().
+  tls.useBuiltinCACertBundle(); // Validate server certificates; never use setInsecure().
   HTTPClient http;
   http.setConnectTimeout(12000);
   http.setTimeout(15000);
