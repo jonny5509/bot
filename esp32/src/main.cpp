@@ -387,7 +387,7 @@ static bool discordWebhook(const String &title,const String &message) {
   if(!discordWebhookUrl.length()) return false;
   if(!discordWebhookUrl.startsWith("https://discord.com/api/webhooks/") &&
      !discordWebhookUrl.startsWith("https://discordapp.com/api/webhooks/")) return false;
-  JsonDocument d; d["content"]="**"+title+"**\\n"+message;
+  JsonDocument d; d["content"]="**"+title+"**\n"+message;
   String body; serializeJson(d,body);
   WiFiClientSecure tls; tls.useBuiltinCACertBundle();
   HTTPClient http; http.setConnectTimeout(6000); http.setTimeout(8000);
@@ -399,7 +399,7 @@ static bool discordWebhook(const String &title,const String &message) {
 static void discordNotify(const String &title,const String &message) {
   discordWebhook(title,message);
   if(discordLogChannelId.length() && discordBotToken.length()) {
-    JsonDocument d; d["content"]="**"+title+"**\\n"+message;
+    JsonDocument d; d["content"]="**"+title+"**\n"+message;
     String body; serializeJson(d,body); String response;
     discordHttp("POST","/channels/"+discordLogChannelId+"/messages",body,response);
   }
@@ -638,7 +638,7 @@ void loop() {
       String out; serializeJson(hb,out); discordWs.sendTXT(out); discordLastHeartbeat=millis();
     }
   }
-  if(discordEnabled && WiFi.status()==WL_CONNECTED && millis()-lastDiscordHealthAt>=21600000UL) {
+  if((discordWebhookUrl.length() || (discordLogChannelId.length() && discordBotToken.length())) && WiFi.status()==WL_CONNECTED && millis()-lastDiscordHealthAt>=21600000UL) {
     lastDiscordHealthAt=millis();
     Reading hr[3]; Change hc[3]; bool ready=false; int64_t target=0;
     String raw=previewJson(ready,hr,hc,target);
